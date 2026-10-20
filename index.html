@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>JF Gestión</title>
+<meta name="description" content="Sistema de gestión de JF Distribuidora: productos, clientes, pedidos, agenda de visitas y estadísticas.">
+<meta name="theme-color" content="#161618">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="JF Gestión">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  html, body { margin: 0; }
+  body { font-size: 14px; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<link rel="stylesheet" href="src/style.css?v=3">
+</head>
+<body>
+<div id="root"><div class="loading"><div class="spinner"></div><span>Abriendo JF Gestión…</span></div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
+<script src="config.js?v=3"></script>
+<script>
+  if (!(window.React && window.ReactDOM && window.htm)) {
+    document.getElementById('root').innerHTML = '<div class="err-box"><strong>No se pudo abrir el sistema.</strong><span>Revisá la conexión a internet y volvé a cargar la página.</span></div>';
+  }
+</script>
+<script src="src/01-core.js?v=3"></script>
+<script src="src/02-docs.js?v=3"></script>
+<script src="src/03-ui.js?v=3"></script>
+<script src="src/04-inicio.js?v=3"></script>
+<script src="src/05-pedidos.js?v=3"></script>
+<script src="src/06-clientes.js?v=3"></script>
+<script src="src/07-productos.js?v=3"></script>
+<script src="src/08-agenda.js?v=3"></script>
+<script src="src/09-estadisticas.js?v=3"></script>
+<script src="src/10-ajustes.js?v=3"></script>
+<script src="src/11-app.js?v=3"></script>
+</body>
+</html>
