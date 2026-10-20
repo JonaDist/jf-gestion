@@ -538,8 +538,8 @@ button.kpi:hover { background: var(--surface); }
 .chart { width: 100%; height: auto; display: block; }
 .chart text { fill: var(--ink-3); font-family: var(--f-ui); font-size: 10.5px; }
 .chart .grid { stroke: var(--line); stroke-width: 1; }
-.chart .bar { fill: var(--blue); }
-.chart .bar.dim { fill: color-mix(in srgb, var(--blue) 35%, var(--card)); }
+.chart .cbar { fill: var(--blue); }
+.chart .cbar.dim { fill: color-mix(in srgb, var(--blue) 35%, var(--card)); }
 .chart .prof { fill: var(--green); }
 .hbars { display: flex; flex-direction: column; gap: 9px; }
 .hbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; align-items: baseline; }

@@ -40,7 +40,7 @@ function BarChart({ data, height = 230, labelFmt = (d) => d.label, tipFmt }) {
         const h1 = Math.max(d.value > 0 ? 1.5 : 0, ih * d.value / top); const h2 = two ? Math.max(d.value2 > 0 ? 1.5 : 0, ih * (d.value2 || 0) / top) : 0;
         return html`<g key=${i} onMouseEnter=${() => setHi(i)} onClick=${() => setHi(i)} style=${{ cursor: 'pointer' }}>
           <rect x=${x0} y=${padT} width=${bw} height=${ih} fill="transparent" />
-          <rect className=${'bar' + (hi >= 0 && hi !== i ? ' dim' : '')} x=${x0 + gap / 2} y=${padT + ih - h1} width=${Math.max(1, w1)} height=${h1} rx=${Math.min(3, w1 / 3)} />
+          <rect className=${'cbar' + (hi >= 0 && hi !== i ? ' dim' : '')} x=${x0 + gap / 2} y=${padT + ih - h1} width=${Math.max(1, w1)} height=${h1} rx=${Math.min(3, w1 / 3)} />
           ${two && html`<rect className="prof" x=${x0 + gap / 2 + w1} y=${padT + ih - h2} width=${Math.max(1, w1)} height=${h2} rx=${Math.min(3, w1 / 3)} opacity=${hi >= 0 && hi !== i ? 0.35 : 1} />`}
           ${i % every === 0 && html`<text x=${x0 + bw / 2} y=${H - 6} textAnchor="middle">${labelFmt(d)}</text>`}
         </g>`;
