@@ -10,5 +10,5 @@
 */
 window.JF_CONFIG = {
   supabaseUrl: '',
-  supabaseKey: '',
+  supabaseKey: 'sb_publishable_e_sinpkolf5BUliBr2NKdw_k0gbBHnb',
 };
