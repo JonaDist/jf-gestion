@@ -253,6 +253,7 @@ function dbErr(e) {
   if (code === 'quota_exceeded') toast('La base de datos está llena. Borrá pedidos viejos o datos de ejemplo.', { tone: 'bad', ms: 7000 });
   else if (code === 'revoked' || code === 'not_granted') { store.readOnly = true; storeEmit(); }
   else if (code === 'resource_exhausted') toast('Demasiadas operaciones seguidas. Esperá unos segundos.', { tone: 'bad' });
+  else if (code === 'PGRST205' || code === 'PGRST202' || code === '42P01' || code === '42883') toast('La base de datos todavía no está preparada: falta correr el script esquema.sql en Supabase (SQL Editor → New query → Run).', { tone: 'bad', ms: 12000 });
   else if (code === '42501' || code === 'PGRST301') toast('Tu usuario no tiene permiso para guardar. Revisá que tu email esté en la lista de miembros.', { tone: 'bad', ms: 7000 });
   else if (code === 'sin-sesion') toast('Se cerró la sesión. Volvé a entrar con tu email y contraseña.', { tone: 'bad', ms: 7000 });
   else toast('No se pudo guardar. Revisá la conexión a internet' + (code ? ` (${code})` : '') + '.', { tone: 'bad', ms: 6000 });
