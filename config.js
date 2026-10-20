@@ -9,6 +9,6 @@
   Si los dejás vacíos, el sistema funciona igual pero guarda todo solo en el navegador.
 */
 window.JF_CONFIG = {
-  supabaseUrl: '',
+  supabaseUrl: 'https://qvwwuwxqndybisglqsdj.supabase.co',
   supabaseKey: 'sb_publishable_e_sinpkolf5BUliBr2NKdw_k0gbBHnb',
 };
