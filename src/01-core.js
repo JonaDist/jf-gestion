@@ -1,6 +1,6 @@
 'use strict';
 /* =========================================================
-   JF Gestión — núcleo: utilidades, formato, cálculos y datos
+   JG Gestión — núcleo: utilidades, formato, cálculos y datos
    ========================================================= */
 const { useState, useEffect, useMemo, useRef, useCallback, useSyncExternalStore, Fragment } = React;
 const html = htm.bind(React.createElement);
@@ -123,7 +123,7 @@ const COND_IVA = ['Consumidor final', 'Responsable inscripto', 'Monotributo', 'E
 const VISITA = { pendiente: 'Pendiente', visitado: 'Visitado', ausente: 'No atendió' };
 
 const DEFAULT_CONFIG = {
-  nombre: 'JF Distribuidora', razonSocial: '', cuit: '', condIva: 'Responsable inscripto', direccion: '', localidad: '', telefono: '', email: '',
+  nombre: 'JG Distribuidora', razonSocial: '', cuit: '', condIva: 'Responsable inscripto', direccion: '', localidad: '', telefono: '', email: '',
   admin: 'Jonah', waDeposito: '', nombreDeposito: 'Depósito', puntoVenta: '0001', validez: 7,
   leyenda: 'Gracias por su compra.', diasInactivo: 30,
 };
@@ -186,7 +186,7 @@ function getCap(name) {
 const COLS = ['productos', 'clientes', 'pedidos', 'visitas'];
 const LS_KEY = 'jf-gestion-datos-v1';
 const store = {
-  mode: 'cargando', readOnly: false, db: null, backend: null, error: '',
+  mode: 'cargando', readOnly: false, db: null, backend: null, error: '', rol: null, rolesActivos: false,
   data: { productos: new Map(), clientes: new Map(), pedidos: new Map(), visitas: new Map() },
   config: { ...DEFAULT_CONFIG },
   loaded: { productos: false, clientes: false, pedidos: false, visitas: false, config: false },
@@ -219,7 +219,7 @@ function buildSnapshot() {
   const hayDemo = productos.some((p) => p.demo) || clientes.some((c) => c.demo);
   return {
     version: store.version, mode: store.mode, readOnly: store.readOnly, ready, config: store.config, error: store.error || '',
-    usuario: SUPA.user ? SUPA.user.email : '',
+    usuario: SUPA.user ? SUPA.user.email : '', rol: store.rol || 'admin', rolesActivos: !!store.rolesActivos, nombreUsuario: store.nombreUsuario || '',
     productos, clientes, pedidos, visitas, calc, cliStats, maxNum, cats, marcas, zonas, hayDemo,
     prodMap: store.data.productos, cliMap: store.data.clientes, pedMap: store.data.pedidos,
   };
@@ -254,6 +254,7 @@ function dbErr(e) {
   else if (code === 'revoked' || code === 'not_granted') { store.readOnly = true; storeEmit(); }
   else if (code === 'resource_exhausted') toast('Demasiadas operaciones seguidas. Esperá unos segundos.', { tone: 'bad' });
   else if (code === 'PGRST205' || code === 'PGRST202' || code === '42P01' || code === '42883') toast('La base de datos todavía no está preparada: falta correr el script esquema.sql en Supabase (SQL Editor → New query → Run).', { tone: 'bad', ms: 12000 });
+  else if (code === '42501' && store.rol && store.rol !== 'admin') toast('Tu rol no tiene permiso para esta acción.', { tone: 'bad', ms: 6000 });
   else if (code === '42501' || code === 'PGRST301') toast('Tu usuario no tiene permiso para guardar. Revisá que tu email esté en la lista de miembros.', { tone: 'bad', ms: 7000 });
   else if (code === 'sin-sesion') toast('Se cerró la sesión. Volvé a entrar con tu email y contraseña.', { tone: 'bad', ms: 7000 });
   else toast('No se pudo guardar. Revisá la conexión a internet' + (code ? ` (${code})` : '') + '.', { tone: 'bad', ms: 6000 });
@@ -323,37 +324,110 @@ function backendSupabase() {
     writeConfig: (body) => up('config', 'negocio', body),
   };
 }
+/* ---------- roles y permisos ---------- */
+const ROLES = {
+  admin: { label: 'Administrador', desc: 'Acceso completo: costos, estadísticas, productos, usuarios y ajustes.' },
+  vendedor: { label: 'Vendedor', desc: 'Arma pedidos y presupuestos, gestiona clientes, agenda y cobros. No ve costos ni estadísticas.' },
+  deposito: { label: 'Depósito', desc: 'Ve los pedidos para armar, los pasa a armado y a listos, y ajusta stock. No ve costos.' },
+  repartidor: { label: 'Repartidor', desc: 'Ve las entregas, marca pedidos entregados y registra cobros. No ve costos.' },
+};
+const PERMISOS = {
+  vendedor: ['ver.pedidos', 'ver.agenda', 'ver.clientes', 'ver.productos', 'pedido.crear', 'pedido.editar', 'pedido.confirmar', 'pedido.cancelar', 'cobro.registrar', 'cliente.editar', 'visita.editar'],
+  deposito: ['ver.pedidos', 'ver.productos', 'pedido.armar', 'producto.stock'],
+  repartidor: ['ver.pedidos', 'ver.agenda', 'ver.clientes', 'pedido.entregar', 'cobro.registrar'],
+};
+/* admin (y el modo de un solo usuario, fuera de Supabase) puede todo */
+function puede(perm) {
+  const r = store.rol || 'admin';
+  if (r === 'admin') return true;
+  return (PERMISOS[r] || []).includes(perm);
+}
+/* quién puede pasar un pedido a cada estado */
+const PERM_ESTADO = { confirmado: 'pedido.confirmar', preparando: 'pedido.armar', listo: 'pedido.armar', entregado: 'pedido.entregar', cancelado: 'pedido.cancelar' };
+const puedeEstado = (estado) => puede(PERM_ESTADO[estado] || 'admin.todo');
+
+async function supaRol() {
+  const r = await SUPA.client.rpc('mi_rol');
+  if (!r.error) return { rol: r.data || null, roles: true };
+  /* base sin la actualización de roles: se usa la lista de miembros como antes */
+  const m = await SUPA.client.rpc('es_miembro');
+  if (m.error) return { rol: 'admin', roles: false };
+  return { rol: m.data === false ? null : 'admin', roles: false };
+}
 async function supaDespuesDeEntrar(user) {
   SUPA.user = user;
-  const { data: miembro, error } = await SUPA.client.rpc('es_miembro');
-  if (!error && miembro === false) { store.mode = 'sin-acceso'; storeEmit(); return; }
+  const { rol, roles } = await supaRol();
+  if (!rol) { store.mode = 'sin-acceso'; storeEmit(); return; }
+  store.rol = rol; store.rolesActivos = roles; store.nombreUsuario = '';
+  if (roles) { try { const r = await SUPA.client.from('miembros').select('nombre').eq('email', (user.email || '').toLowerCase()).maybeSingle(); if (r.data && r.data.nombre) store.nombreUsuario = r.data.nombre; } catch (e) { /* sin nombre */ } }
   store.mode = 'supa'; store.backend = backendSupabase(); storeEmit();
   try { await supaFetchAll(); } catch (e) { for (const k of Object.keys(store.loaded)) store.loaded[k] = true; storeEmit(); dbErr(e); }
   supaSubscribe();
+  /* el negocio pasó a llamarse JG */
+  if (store.config.nombre === 'JF Distribuidora' && rol === 'admin') safe(putConfig({ nombre: 'JG Distribuidora' }));
+}
+const urlApp = () => location.origin + location.pathname;
+function mensajeAuth(error) {
+  const m = (error && error.message) || '';
+  if (/invalid login|invalid credentials/i.test(m)) return 'Email o contraseña incorrectos.';
+  if (/not confirmed/i.test(m)) return 'Todavía no confirmaste tu email. Buscá el correo de confirmación (revisá también spam).';
+  if (/already registered|already exists/i.test(m)) return 'Ese email ya tiene cuenta. Entrá con tu contraseña o usá "Olvidé mi contraseña".';
+  if (/password should be|at least/i.test(m)) return 'La contraseña tiene que tener al menos 6 caracteres.';
+  if (/rate limit|too many/i.test(m)) return 'Demasiados intentos seguidos. Esperá unos minutos y probá de nuevo.';
+  if (/signups not allowed|signup is disabled/i.test(m)) return 'La creación de cuentas está desactivada. Pedile al administrador que te cree el usuario.';
+  return m || 'No se pudo completar. Probá de nuevo.';
 }
 async function supaLogin(email, password) {
-  const { data, error } = await SUPA.client.auth.signInWithPassword({ email: email.trim(), password });
-  if (error) {
-    const msg = /invalid login|invalid credentials/i.test(error.message) ? 'Email o contraseña incorrectos.' : /not confirmed/i.test(error.message) ? 'Ese usuario no está confirmado. En Supabase, crealo con "Auto Confirm User".' : error.message;
-    throw new Error(msg);
-  }
+  const { data, error } = await SUPA.client.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+  if (error) throw new Error(mensajeAuth(error));
+  store.mode = 'cargando'; storeEmit();
+  await supaDespuesDeEntrar(data.user);
+}
+async function supaRegistro(email, password) {
+  const { data, error } = await SUPA.client.auth.signUp({ email: email.trim().toLowerCase(), password, options: { emailRedirectTo: urlApp() } });
+  if (error) throw new Error(mensajeAuth(error));
+  if (data && data.session) { store.mode = 'cargando'; storeEmit(); await supaDespuesDeEntrar(data.user); return 'ok'; }
+  return 'confirmar';
+}
+async function supaRecuperar(email) {
+  const { error } = await SUPA.client.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: urlApp() });
+  if (error) throw new Error(mensajeAuth(error));
+}
+async function supaNuevaClave(password) {
+  const { data, error } = await SUPA.client.auth.updateUser({ password });
+  if (error) throw new Error(mensajeAuth(error));
+  try { history.replaceState(null, '', urlApp()); } catch (e) { /* sin historial */ }
   store.mode = 'cargando'; storeEmit();
   await supaDespuesDeEntrar(data.user);
 }
 async function supaLogout() {
   try { if (SUPA.channel) SUPA.client.removeChannel(SUPA.channel); await SUPA.client.auth.signOut(); } catch (e) { /* sin conexión */ }
-  SUPA.user = null; SUPA.channel = null;
+  SUPA.user = null; SUPA.channel = null; store.rol = null;
   store.data = { productos: new Map(), clientes: new Map(), pedidos: new Map(), visitas: new Map() };
   store.config = { ...DEFAULT_CONFIG }; store.mode = 'login';
   for (const k of Object.keys(store.loaded)) store.loaded[k] = false;
   storeEmit();
 }
+/* usuarios del sistema (tabla miembros) */
+const usuarios = {
+  async listar() { const { data, error } = await SUPA.client.from('miembros').select('email,nombre,rol').order('email'); supaThrow(error); return data || []; },
+  async guardar(u) {
+    const row = { email: u.email.trim().toLowerCase(), nombre: (u.nombre || '').trim() || null, rol: u.rol };
+    const { error } = await SUPA.client.from('miembros').upsert(row, { onConflict: 'email' }); supaThrow(error);
+  },
+  async quitar(email) { const { error } = await SUPA.client.from('miembros').delete().eq('email', email); supaThrow(error); },
+};
 async function initSupabase(cfg) {
   if (!window.supabase || !window.supabase.createClient) { store.mode = 'error'; store.error = 'No se pudo cargar la conexión con la base de datos. Revisá internet y recargá la página.'; storeEmit(); return; }
-  SUPA.client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'jf-gestion-sesion' } });
-  SUPA.client.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_OUT' && store.mode === 'supa') { store.mode = 'login'; storeEmit(); } });
+  const recuperando = /type=recovery/.test(location.hash || '') || /type=recovery/.test(location.search || '');
+  SUPA.client = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'jf-gestion-sesion' } });
+  SUPA.client.auth.onAuthStateChange((ev) => {
+    if (ev === 'PASSWORD_RECOVERY') { store.mode = 'nueva-clave'; storeEmit(); }
+    else if (ev === 'SIGNED_OUT' && store.mode === 'supa') { store.mode = 'login'; storeEmit(); }
+  });
   const { data } = await SUPA.client.auth.getSession();
-  if (data && data.session) await supaDespuesDeEntrar(data.session.user);
+  if (store.mode === 'nueva-clave' || (recuperando && data && data.session)) { store.mode = 'nueva-clave'; storeEmit(); }
+  else if (data && data.session) await supaDespuesDeEntrar(data.session.user);
   else { store.mode = 'login'; storeEmit(); }
   const refrescar = () => { if (store.mode === 'supa' && document.visibilityState === 'visible' && Date.now() - SUPA.lastFetch > 45000) { safe(supaFetchAll()); supaSubscribe(); } };
   document.addEventListener('visibilitychange', refrescar);

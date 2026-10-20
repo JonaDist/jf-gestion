@@ -92,25 +92,25 @@ function Clientes({ s, go, params }) {
   const base = s.clientes.filter((c) => (!zona || (c.zona || c.localidad) === zona) && matches(q, c.nombre, c.contacto, c.telefono, c.direccion, c.localidad, c.zona, c.cuit));
   const lista = base.filter(test[f] || test.todos);
   const totalDeuda = lista.reduce((a, c) => a + ((s.cliStats.get(c.id) || {}).saldo || 0), 0);
-  const exportar = () => guardarArchivo('clientes-jf.csv', toCSV([['Nombre', 'Contacto', 'Teléfono', 'Dirección', 'Localidad', 'Zona', 'CUIT', 'Condición IVA', 'Día de visita', 'Descuento %', 'Total comprado', 'Saldo', 'Última compra', 'Notas'],
+  const exportar = () => guardarArchivo('clientes-jg.csv', toCSV([['Nombre', 'Contacto', 'Teléfono', 'Dirección', 'Localidad', 'Zona', 'CUIT', 'Condición IVA', 'Día de visita', 'Descuento %', 'Total comprado', 'Saldo', 'Última compra', 'Notas'],
     ...lista.map((c) => { const st = s.cliStats.get(c.id) || {}; return [c.nombre, c.contacto, c.telefono, c.direccion, c.localidad, c.zona, c.cuit, c.condIva, c.diaVisita === '' || c.diaVisita == null ? '' : DIAS[c.diaVisita], csvNum(c.descuento || 0), csvNum(st.total || 0), csvNum(st.saldo || 0), st.ultima ? fmtCorta(st.ultima) : '', c.notas]; })]));
   useCtx('Clientes', [
-    { id: 'nc', title: 'Agregar cliente', icon: 'user', tone: 'c-blue', key: 'a', primary: true, run: () => setForm({}) },
+    puede('cliente.editar') && { id: 'nc', title: 'Agregar cliente', icon: 'user', tone: 'c-blue', key: 'a', primary: true, run: () => setForm({}) },
     { id: 'fd', title: 'Ver clientes con deuda', icon: 'cash', tone: 'c-yellow', run: () => setF('deuda') },
     { id: 'fh', title: 'Ver clientes para visitar hoy', icon: 'calendar', tone: 'c-purple', run: () => setF('hoy') },
     { id: 'fi', title: `Ver clientes sin comprar hace +${dIn} días`, icon: 'clock', run: () => setF('inactivos') },
-    lista.length ? { id: 'ex', title: 'Exportar clientes a CSV', icon: 'download', run: exportar } : null,
+    lista.length && s.rol === 'admin' ? { id: 'ex', title: 'Exportar clientes a CSV', icon: 'download', run: exportar } : null,
   ]);
   return html`<${Fragment}>
     <${PageHead} title="Clientes" sub=${`${lista.length} en la cartera${totalDeuda > 0.5 ? ' · deben ' + money(totalDeuda) : ''}`}
-      actions=${html`<button className="btn" onClick=${exportar} disabled=${!lista.length}><${Icon} n="download" s=${15} /><span className="desk-only">Exportar</span></button><${KBtn} cls="primary" icon="plus" k="a" onClick=${() => setForm({})}>Cliente<//>`} />
+      actions=${html`${s.rol === 'admin' && html`<button className="btn" onClick=${exportar} disabled=${!lista.length}><${Icon} n="download" s=${15} /><span className="desk-only">Exportar</span></button>`}${puede('cliente.editar') && html`<${KBtn} cls="primary" icon="plus" k="a" onClick=${() => setForm({})}>Cliente<//>`}`} />
     <div className="row-flex wrap">
       <${Search} page value=${q} onChange=${setQ} placeholder="Buscar por nombre, teléfono, dirección o CUIT" />
       ${s.zonas.length > 1 && html`<select className="select" style=${{ width: 'auto', flex: '0 1 190px' }} value=${zona} onChange=${(e) => setZona(e.target.value)} aria-label="Filtrar por zona"><option value="">Todas las zonas</option>${s.zonas.map((z) => html`<option key=${z} value=${z}>${z}</option>`)}</select>`}
     </div>
     <${Chips} value=${f} onChange=${setF} options=${[['todos', 'Activos'], ['hoy', 'Visita hoy'], ['deuda', 'Con deuda'], ['inactivos', `Sin comprar +${dIn} días`], ['baja', 'Dados de baja']].map(([v, l]) => ({ v, l, ct: base.filter(test[v]).length }))} />
     ${lista.length === 0 ? html`<div className="panel"><${Empty} icon="users" title=${s.clientes.length ? 'Ningún cliente con estos filtros' : 'Todavía no cargaste clientes'} sub=${s.clientes.length ? 'Probá con otra búsqueda o filtro.' : 'Cargá cada comercio con su dirección, WhatsApp y día de visita.'}>
-        ${!s.clientes.length && html`<${KBtn} cls="primary" icon="plus" k="a" onClick=${() => setForm({})}>Agregar cliente<//>`}<//></div>`
+        ${!s.clientes.length && puede('cliente.editar') && html`<${KBtn} cls="primary" icon="plus" k="a" onClick=${() => setForm({})}>Agregar cliente<//>`}<//></div>`
     : html`<div className="panel" style=${{ padding: '6px 0' }}><div className="list">${lista.map((c) => { const st = s.cliStats.get(c.id) || {}; return html`<button key=${c.id} className="li" data-row="" onClick=${() => go('cliente', { id: c.id })}>
         <${Ico} tone=${colorFor(c.nombre)} text=${initials(c.nombre)} />
         <div className="li-main"><span className="li-t">${c.nombre}</span>
@@ -140,14 +140,14 @@ function ClienteDetalle({ s, go, back, params }) {
   const waHola = c ? waLink(c.telefono, `Hola${c.contacto ? ' ' + c.contacto.split(' ')[0] : ''}, te escribo de ${s.config.nombre}.`) : '';
   const waSaldo = c && deudas.length ? waLink(c.telefono, textoCobro(c, st.saldo, deudas, s.config)) : '';
   const acts = c ? [
-    { id: 'np', title: 'Nuevo pedido para ' + c.nombre, icon: 'receipt', tone: 'c-red', key: 'n', primary: true, run: () => go('armador', { clienteId: c.id }) },
+    puede('pedido.crear') && { id: 'np', title: 'Nuevo pedido para ' + c.nombre, icon: 'receipt', tone: 'c-red', key: 'n', primary: true, run: () => go('armador', { clienteId: c.id }) },
     c.telefono ? { id: 'wa', title: 'Escribir por WhatsApp', icon: 'wa', tone: 'c-green', key: 'w', href: waHola } : null,
-    deudas.length ? { id: 'co', title: 'Cobrar a cuenta', icon: 'cash', tone: 'c-yellow', key: 'c', run: () => setCobro(true) } : null,
-    deudas.length ? { id: 'ws', title: 'Pasar el saldo por WhatsApp', icon: 'wa', tone: 'c-green', href: waSaldo } : null,
-    { id: 'vi', title: 'Agendar visita', icon: 'calendar', tone: 'c-purple', key: 'v', run: () => setVisita(true) },
-    { id: 'ed', title: 'Editar datos', icon: 'edit', tone: 'c-blue', key: 'm', run: () => setForm(true) },
+    deudas.length && puede('cobro.registrar') ? { id: 'co', title: 'Cobrar a cuenta', icon: 'cash', tone: 'c-yellow', key: 'c', run: () => setCobro(true) } : null,
+    deudas.length && puede('cobro.registrar') ? { id: 'ws', title: 'Pasar el saldo por WhatsApp', icon: 'wa', tone: 'c-green', href: waSaldo } : null,
+    puede('visita.editar') && { id: 'vi', title: 'Agendar visita', icon: 'calendar', tone: 'c-purple', key: 'v', run: () => setVisita(true) },
+    puede('cliente.editar') && { id: 'ed', title: 'Editar datos', icon: 'edit', tone: 'c-blue', key: 'm', run: () => setForm(true) },
     (c.direccion || c.localidad) ? { id: 'ma', title: 'Ver en el mapa', icon: 'pin', href: mapsLink(c.direccion, c.localidad) } : null,
-    { id: 'del', title: 'Eliminar cliente', icon: 'trash', tone: 'c-red', key: 'mod+backspace', danger: true, run: eliminar },
+    s.rol === 'admin' && { id: 'del', title: 'Eliminar cliente', icon: 'trash', tone: 'c-red', key: 'mod+backspace', danger: true, run: eliminar },
   ].filter(Boolean) : [];
   useCtx(c ? c.nombre : 'Cliente', acts);
   if (!c) return html`<${Fragment}><${PageHead} title="Cliente no encontrado" /><div className="panel"><${Empty} icon="users" title="Este cliente no existe o fue eliminado."><button className="btn" onClick=${back}>Volver</button><//></div><//>`;
@@ -162,7 +162,7 @@ function ClienteDetalle({ s, go, back, params }) {
     <div className="row-flex" style=${{ gap: '12px' }}>
       <${Ico} tone=${colorFor(c.nombre)} text=${initials(c.nombre)} lg />
       <div className="grow"><${PageHead} title=${c.nombre} sub=${[c.contacto, c.zona || c.localidad, c.activo === false ? 'Dado de baja' : null].filter(Boolean).join(' · ') || 'Cliente'}
-        actions=${html`<${KBtn} cls="primary" icon="plus" k="n" onClick=${() => go('armador', { clienteId: c.id })}>Pedido<//>${c.telefono && html`<a className="btn wa" href=${waHola} target="_blank" rel="noopener"><${Icon} n="wa" s=${15} />WhatsApp</a>`}`} /></div>
+        actions=${html`${puede('pedido.crear') && html`<${KBtn} cls="primary" icon="plus" k="n" onClick=${() => go('armador', { clienteId: c.id })}>Pedido<//>`}${c.telefono && html`<a className="btn wa" href=${waHola} target="_blank" rel="noopener"><${Icon} n="wa" s=${15} />WhatsApp</a>`}`} /></div>
     </div>
     <div className="kpis">
       <${Kpi} label="Total comprado" value=${moneyK(st.total)} sub=${st.pedidos + ' pedidos'} />
@@ -172,7 +172,7 @@ function ClienteDetalle({ s, go, back, params }) {
     </div>
     <div className="cols c-2-1">
       <div className="stack">
-        ${deudas.length > 0 && html`<${Panel} title="Cuenta corriente" count=${deudas.length} flush actions=${html`<a className="btn sm wa" href=${waSaldo} target="_blank" rel="noopener"><${Icon} n="wa" s=${13} />Pasar saldo</a><${KBtn} cls="sm primary" k="c" onClick=${() => setCobro(true)}>Cobrar<//>`}>
+        ${deudas.length > 0 && html`<${Panel} title="Cuenta corriente" count=${deudas.length} flush actions=${puede('cobro.registrar') ? html`<a className="btn sm wa" href=${waSaldo} target="_blank" rel="noopener"><${Icon} n="wa" s=${13} />Pasar saldo</a><${KBtn} cls="sm primary" k="c" onClick=${() => setCobro(true)}>Cobrar<//>` : null}>
           <div className="list">${deudas.map(({ p, c: cc }) => html`<button key=${p.id} className="li" data-row="" onClick=${() => go('pedido', { id: p.id })}>
             <${Ico} n="receipt" tone="c-yellow" />
             <div className="li-main"><span className="li-t"><span className="ordno">${numCorto(p)}</span> · ${fmtCorta(p.fecha)}</span><span className="li-s">Total ${money(cc.total)}${cc.pagado > 0 ? ' · pagó ' + money(cc.pagado) : ''} · hace ${diasEntre(p.fecha, todayISO())} días</span></div>
@@ -180,7 +180,7 @@ function ClienteDetalle({ s, go, back, params }) {
         <//>`}
         <${Panel} title="Pedidos" count=${peds.length || null} flush>
           ${peds.length ? html`<div className="list">${peds.slice(0, 30).map((p) => html`<${PedidoRow} key=${p.id} p=${p} c=${s.calc.get(p.id)} showCli=${false} onClick=${() => go('pedido', { id: p.id })} />`)}</div>`
-          : html`<${Empty} icon="receipt" title="Todavía no le vendiste" sub="Armale el primer pedido desde acá."><${KBtn} cls="primary" k="n" onClick=${() => go('armador', { clienteId: c.id })}>Armar pedido<//><//>`}
+          : html`<${Empty} icon="receipt" title="Todavía no le vendiste" sub=${puede('pedido.crear') ? 'Armale el primer pedido desde acá.' : ''}>${puede('pedido.crear') && html`<${KBtn} cls="primary" k="n" onClick=${() => go('armador', { clienteId: c.id })}>Armar pedido<//>`}<//>`}
         <//>
       </div>
       <div className="stack">
@@ -196,7 +196,7 @@ function ClienteDetalle({ s, go, back, params }) {
             ${c.notas && html`<dt>Notas</dt><dd>${c.notas}</dd>`}
           </dl>
         <//>
-        <${Panel} title="Próximas visitas" flush actions=${html`<${KBtn} cls="sm ghost" k="v" onClick=${() => setVisita(true)}>Agendar<//>`}>
+        <${Panel} title="Próximas visitas" flush actions=${puede('visita.editar') ? html`<${KBtn} cls="sm ghost" k="v" onClick=${() => setVisita(true)}>Agendar<//>` : null}>
           ${prox.length ? html`<div className="list">${prox.map((v) => html`<div key=${v.id} className="li plain"><${Ico} n="calendar" tone="c-purple" /><div className="li-main"><span className="li-t">${cap(relDia(v.fecha) === fmtDia(v.fecha) ? fmtLarga(v.fecha) : relDia(v.fecha))}</span><span className="li-s">${[v.hora, v.nota, VISITA[v.estado]].filter(Boolean).join(' · ')}</span></div></div>`)}</div>`
           : html`<div className="li muted-row" style=${{ padding: '2px 14px' }}>Sin visitas agendadas.</div>`}
         <//>

@@ -23,17 +23,17 @@ function VisitaRow({ v, s, go, onEdit }) {
   return html`<div className="li" style=${{ flexWrap: 'wrap', cursor: 'default' }}>
     ${v.estado === 'visitado' ? html`<${Ico} n="check" tone="c-green" />` : v.estado === 'ausente' ? html`<${Ico} n="ban" tone="c-red" />` : html`<${Ico} tone=${cli ? colorFor(cli.nombre) : ''} text=${initials(cli ? cli.nombre : '?')} />`}
     <div className="li-main" style=${{ flex: '1 1 160px' }}>
-      <button className="li-t" data-row="" style=${{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick=${() => cli && go('cliente', { id: cli.id })}>${cli ? cli.nombre : 'Cliente eliminado'}</button>
+      <button className="li-t" data-row="" style=${{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'inherit' }} onClick=${() => cli && puede('ver.clientes') && go('cliente', { id: cli.id })}>${cli ? cli.nombre : 'Cliente eliminado'}</button>
       <span className="li-s">${[v.hora, cli && (cli.zona || cli.localidad), v.nota].filter(Boolean).join(' · ') || 'Sin horario'}</span>
     </div>
     <div className="row-flex wrap" style=${{ gap: '5px', justifyContent: 'flex-end' }}>
       ${ped ? html`<button className="btn sm" onClick=${() => go('pedido', { id: ped.id })}><${Icon} n="receipt" s=${13} />${numCorto(ped)}</button>`
-      : html`<button className="btn sm primary" onClick=${() => go('armador', { clienteId: v.clienteId, visitaId: v.id })}><${Icon} n="plus" s=${13} />Pedido</button>`}
-      <div className="vstate">
+      : puede('pedido.crear') ? html`<button className="btn sm primary" onClick=${() => go('armador', { clienteId: v.clienteId, visitaId: v.id })}><${Icon} n="plus" s=${13} />Pedido</button>` : null}
+      ${puede('visita.editar') ? html`<div className="vstate">
         <button className=${v.estado === 'visitado' ? 'on ok' : ''} onClick=${() => setEstado('visitado')}>Visitado</button>
         <button className=${v.estado === 'ausente' ? 'on bad' : ''} onClick=${() => setEstado('ausente')}>No atendió</button>
-      </div>
-      ${onEdit && html`<button className="iconbtn" aria-label="Editar visita" onClick=${onEdit}><${Icon} n="edit" s=${15} /></button>`}
+      </div>` : html`<span className="small muted">${VISITA[v.estado]}</span>`}
+      ${onEdit && puede('visita.editar') && html`<button className="iconbtn" aria-label="Editar visita" onClick=${onEdit}><${Icon} n="edit" s=${15} /></button>`}
     </div>
   </div>`;
 }
@@ -75,17 +75,20 @@ function Inicio({ s, go }) {
   const vacio = s.productos.length === 0 && s.clientes.length === 0 && s.pedidos.length === 0;
   const [cargandoDemo, setCargandoDemo] = useState(false);
   const [visita, setVisita] = useState(null);
+  const esAdmin = s.rol === 'admin';
   useCtx('Inicio', [
-    { id: 'np', title: 'Nuevo pedido', icon: 'receipt', tone: 'c-red', key: 'n', primary: true, run: () => go('armador', {}) },
-    { id: 'vi', title: 'Agendar visita para hoy', icon: 'calendar', tone: 'c-purple', key: 'v', run: () => setVisita({ fecha: hoy }) },
-    { id: 'ru', title: 'Cargar ruta de la semana', icon: 'route', tone: 'c-purple', key: 'r', run: () => cargarRutaSemana(s, new Date()) },
+    puede('pedido.crear') && { id: 'np', title: 'Nuevo pedido', icon: 'receipt', tone: 'c-red', key: 'n', primary: true, run: () => go('armador', {}) },
+    puede('visita.editar') && { id: 'vi', title: 'Agendar visita para hoy', icon: 'calendar', tone: 'c-purple', key: 'v', run: () => setVisita({ fecha: hoy }) },
+    puede('visita.editar') && { id: 'ru', title: 'Cargar ruta de la semana', icon: 'route', tone: 'c-purple', key: 'r', run: () => cargarRutaSemana(s, new Date()) },
+    !puede('pedido.crear') && puede('ver.pedidos') && { id: 'pa', title: 'Ver pedidos para armar', icon: 'truck', tone: 'c-orange', primary: true, run: () => go('pedidos', { estado: s.rol === 'repartidor' ? 'listo' : 'activos' }) },
   ]);
+  const nombre = esAdmin ? (cfg.admin || 'Jonah') : s.nombreUsuario;
 
   return html`<${Fragment}>
-    <${PageHead} title=${`${saludo}, ${cfg.admin || 'Jonah'}`} sub=${cap(fmtLarga(hoy))}
-      actions=${html`<${KBtn} cls="primary desk-only" icon="plus" k="n" onClick=${() => go('armador', {})}>Nuevo pedido<//>`} />
+    <${PageHead} title=${nombre ? `${saludo}, ${nombre}` : saludo} sub=${cap(fmtLarga(hoy)) + (esAdmin ? '' : ' · ' + ROLES[s.rol].label)}
+      actions=${puede('pedido.crear') ? html`<${KBtn} cls="primary desk-only" icon="plus" k="n" onClick=${() => go('armador', {})}>Nuevo pedido<//>` : null} />
 
-    ${vacio && html`<${Panel} title="Primeros pasos" flush>
+    ${vacio && esAdmin && html`<${Panel} title="Primeros pasos" flush>
       <div className="list">
         ${[['box', 'c-orange', 'Cargá tus productos', 'Uno por uno o pegando la lista desde Excel', () => go('productos', {})],
           ['users', 'c-blue', 'Cargá tu cartera de clientes', 'Con día de visita para armar la ruta solo', () => go('clientes', {})],
@@ -99,19 +102,19 @@ function Inicio({ s, go }) {
       </div>
     <//>`}
 
-    <div className="kpis">
+    ${esAdmin && html`<div className="kpis">
       <${Kpi} hl label="Vendido hoy" value=${money(d.vHoy)} sub=${d.nHoy === 1 ? '1 pedido' : d.nHoy + ' pedidos'} onClick=${() => go('pedidos', {})} />
       <${Kpi} label="Vendido en el mes" value=${moneyK(d.vMes)} trend=${d.trend} sub=${d.trend != null ? 'vs. mes pasado' : d.nMes + ' pedidos'} onClick=${() => go('estadisticas', {})} />
       <${Kpi} label="Ganancia del mes" value=${moneyK(d.gMes)} sub=${'Margen ' + pct(d.vMes > 0 ? d.gMes / d.vMes * 100 : 0)} onClick=${() => go('estadisticas', {})} />
       <${Kpi} label="Por cobrar" value=${moneyK(d.porCobrar)} sub=${d.deudores === 1 ? '1 cliente debe' : d.deudores + ' clientes deben'} onClick=${() => go('clientes', { filtro: 'deuda' })} />
-    </div>
+    </div>`}
 
     <div className="cols c-2-1">
       <div className="stack">
-        <${Panel} title="Visitas de hoy" count=${d.visitasHoy.length || null} flush actions=${html`<${KBtn} cls="sm ghost" k="v" onClick=${() => setVisita({ fecha: hoy })}>Agendar<//>`}>
+        ${puede('ver.agenda') && s.rol !== 'repartidor' && html`<${Panel} title="Visitas de hoy" count=${d.visitasHoy.length || null} flush actions=${puede('visita.editar') ? html`<${KBtn} cls="sm ghost" k="v" onClick=${() => setVisita({ fecha: hoy })}>Agendar<//>` : null}>
           ${d.visitasHoy.length ? html`<div className="list">${d.visitasHoy.map((v) => html`<${VisitaRow} key=${v.id} v=${v} s=${s} go=${go} />`)}</div>`
-          : html`<${Empty} icon="route" title="No hay visitas para hoy" sub="Agendá visitas o cargá la ruta de la semana con el día de visita de cada cliente."><${KBtn} cls="sm" icon="route" k="r" onClick=${() => cargarRutaSemana(s, new Date())}>Cargar ruta de la semana<//><//>`}
-        <//>
+          : html`<${Empty} icon="route" title="No hay visitas para hoy" sub="Agendá visitas o cargá la ruta de la semana con el día de visita de cada cliente.">${puede('visita.editar') && html`<${KBtn} cls="sm" icon="route" k="r" onClick=${() => cargarRutaSemana(s, new Date())}>Cargar ruta de la semana<//>`}<//>`}
+        <//>`}
         <${Panel} title="Para armar y entregar" count=${d.aPreparar.length || null} flush actions=${html`<button className="btn sm ghost" onClick=${() => go('pedidos', { estado: 'activos' })}>Ver todos</button>`}>
           ${d.aPreparar.length ? html`<div className="list">${d.aPreparar.slice(0, 8).map((p) => html`<${PedidoRow} key=${p.id} p=${p} c=${s.calc.get(p.id)} onClick=${() => go('pedido', { id: p.id })} />`)}</div>`
           : html`<${Empty} icon="receipt" title="Nada pendiente de armado" sub="Los pedidos confirmados aparecen acá hasta que se entregan." />`}
@@ -125,14 +128,14 @@ function Inicio({ s, go }) {
             <span className="amt">${money(s.calc.get(p.id).total)}</span></button>`)}</div>`
           : html`<div className="li muted-row" style=${{ padding: '4px 14px' }}>Sin entregas para hoy ni mañana.</div>`}
         <//>
-        <${Panel} title="Stock bajo" count=${d.bajos.length || null} flush actions=${d.bajos.length > 0 ? html`<button className="btn sm ghost" onClick=${() => go('productos', { filtro: 'bajo' })}>Ver todo</button>` : null}>
+        ${(esAdmin || puede('producto.stock')) && html`<${Panel} title="Stock bajo" count=${d.bajos.length || null} flush actions=${d.bajos.length > 0 ? html`<button className="btn sm ghost" onClick=${() => go('productos', { filtro: 'bajo' })}>Ver todo</button>` : null}>
           ${d.bajos.length ? html`<div className="list">${d.bajos.slice(0, 6).map((p) => html`<button key=${p.id} className="li" data-row="" onClick=${() => go('productos', { open: p.id })}>
             <${Ico} n="alert" tone=${(Number(p.stock) || 0) <= 0 ? 'c-red' : 'c-yellow'} />
             <div className="li-main"><span className="li-t">${p.nombre}</span><span className="li-s">${Number(p.stockMin) > 0 ? 'mínimo ' + qty(p.stockMin) : p.codigo || ''}</span></div>
             <span className="acc">${qty(p.stock)} en stock</span></button>`)}</div>`
           : html`<div className="li muted-row" style=${{ padding: '4px 14px' }}>Todo el stock está por encima del mínimo.</div>`}
-        <//>
-        ${d.presupuestos.length > 0 && html`<${Panel} title="Presupuestos abiertos" count=${d.presupuestos.length} flush>
+        <//>`}
+        ${d.presupuestos.length > 0 && puede('pedido.confirmar') && html`<${Panel} title="Presupuestos abiertos" count=${d.presupuestos.length} flush>
           <div className="list">${d.presupuestos.slice(0, 5).map((p) => html`<${PedidoRow} key=${p.id} p=${p} c=${s.calc.get(p.id)} onClick=${() => go('pedido', { id: p.id })} />`)}</div>
         <//>`}
       </div>

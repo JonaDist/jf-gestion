@@ -1,6 +1,6 @@
-# JF Gestión
+# JG Gestión
 
-Sistema de gestión de **JF Distribuidora**: catálogo con costos y precios, cartera de clientes con cuenta corriente, armador de pedidos con envío por WhatsApp, etiqueta para el depósito, boleta en PDF, agenda de visitas y estadísticas.
+Sistema de gestión de **JG Distribuidora**: catálogo con costos y precios, cartera de clientes con cuenta corriente, armador de pedidos con envío por WhatsApp, etiqueta para el depósito, boleta en PDF, agenda de visitas y estadísticas.
 
 Funciona en la compu y en el celular, y se puede instalar en la pantalla de inicio como una app.
 
@@ -19,8 +19,8 @@ Funciona en la compu y en el celular, y se puede instalar en la pantalla de inic
 
 ### 1. Base de datos (Supabase)
 1. Creá un proyecto en [supabase.com](https://supabase.com) (región São Paulo).
-2. En **SQL Editor**, corré `supabase/esquema.sql` con los emails reales en la lista de miembros.
-3. En **Authentication → Users → Add user**, creá cada usuario con **Auto Confirm User** tildado.
+2. En **SQL Editor**, corré `supabase/esquema.sql` (al final está el email del administrador inicial).
+3. Entrá a la app con ese email (Crear cuenta la primera vez) y sumá al resto desde Ajustes → Usuarios y roles.
 4. En **Project Settings → API**, copiá la **Project URL** y la clave **anon public** (o *publishable*) en `config.js`.
 
 > La clave anon/publishable es pública por diseño. Nunca pongas la clave `service_role` ni la `secret` en este repositorio.
@@ -32,6 +32,21 @@ Funciona en la compu y en el celular, y se puede instalar en la pantalla de inic
 
 ### 3. Pasar los datos que ya estaban cargados
 En la versión anterior: **Ajustes → Descargar respaldo**. En la nueva: **Ajustes → Restaurar respaldo**.
+
+## Roles
+
+| Rol | Qué puede hacer |
+|---|---|
+| Administrador | Todo: costos y ganancias, estadísticas, productos y precios, usuarios, ajustes, eliminar. |
+| Vendedor | Arma pedidos y presupuestos, edita pedidos hasta que pasan a armado, gestiona clientes, agenda y cobros. No ve costos ni estadísticas. |
+| Depósito | Ve los pedidos para armar, los pasa a armado y a listos, ajusta stock. No ve costos. |
+| Repartidor | Ve las entregas, marca pedidos entregados y registra cobros. No ve costos. |
+
+Los permisos se controlan en la app y también en la base de datos (`supabase/esquema.sql`, función `puede_escribir`).
+Los usuarios se agregan desde **Ajustes → Usuarios y roles**; la primera vez, cada persona toca **Crear cuenta** con su email.
+
+Para que los emails de confirmación y de recuperar contraseña vuelvan a la app:
+Supabase → **Authentication → URL Configuration → Site URL** = `https://jonadist.github.io/jf-gestion/`.
 
 ## Instalar en el celular
 - **Android (Chrome):** menú ⋮ → **Agregar a la pantalla principal** / **Instalar app**.

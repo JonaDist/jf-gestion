@@ -66,8 +66,60 @@ async function borrarDemo() {
 }
 
 function descargarRespaldo(s) {
-  const j = { app: 'JF Gestión', version: 1, exportado: new Date().toISOString(), config: s.config, productos: s.productos, clientes: s.clientes, pedidos: s.pedidos, visitas: s.visitas };
-  return guardarArchivo(`respaldo-jf-${todayISO()}.json`, JSON.stringify(j, null, 1));
+  const j = { app: 'JG Gestión', version: 1, exportado: new Date().toISOString(), config: s.config, productos: s.productos, clientes: s.clientes, pedidos: s.pedidos, visitas: s.visitas };
+  return guardarArchivo(`respaldo-jg-${todayISO()}.json`, JSON.stringify(j, null, 1));
+}
+
+/* ---------- usuarios y roles (solo administrador, versión con Supabase) ---------- */
+function UsuarioForm({ init, onClose, onSaved }) {
+  const editing = !!(init && init.email);
+  const [u, setU] = useState(() => ({ email: '', nombre: '', rol: 'vendedor', ...(init || {}) }));
+  const [busy, setBusy] = useState(false);
+  const ok = async () => {
+    if (busy) return;
+    const email = u.email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('Escribí un email válido.', { tone: 'bad' }); return; }
+    setBusy(true);
+    try { await usuarios.guardar({ ...u, email }); toast(editing ? 'Usuario actualizado' : 'Usuario agregado'); onSaved(); }
+    catch (e) { toast(/administrador/i.test(e.message || '') ? 'Tiene que quedar al menos un administrador.' : 'No se pudo guardar: ' + (e.message || 'error'), { tone: 'bad', ms: 6000 }); setBusy(false); }
+  };
+  return html`<${Modal} title=${editing ? 'Editar usuario' : 'Agregar usuario'} onClose=${onClose} onSubmit=${ok} footer=${html`<button className="btn ghost" onClick=${onClose}>Cancelar</button><button className="btn primary" disabled=${busy} onClick=${ok}>${editing ? 'Guardar' : 'Agregar'}</button>`}>
+    <${Field} label="Email" id="us-email" hint=${editing ? 'El email no se puede cambiar. Para usar otro, agregalo como usuario nuevo.' : 'Con este email va a crear su cuenta o entrar.'}><input id="us-email" className="input" type="email" inputMode="email" value=${u.email} readOnly=${editing} onChange=${(e) => setU((x) => ({ ...x, email: e.target.value }))} autoFocus=${!editing} placeholder="nombre@gmail.com" /><//>
+    <${Field} label="Nombre" id="us-nombre" hint="Para el saludo y para saber quién tomó cada pedido."><input id="us-nombre" className="input" value=${u.nombre || ''} onChange=${(e) => setU((x) => ({ ...x, nombre: e.target.value }))} placeholder="Ej.: Martín" /><//>
+    <div className="field"><span className="lbl">Rol</span>
+      <div className="list" style=${{ border: '1px solid var(--line)', borderRadius: 'var(--r)', padding: '4px' }}>
+        ${Object.entries(ROLES).map(([k, r]) => html`<label key=${k} className="li" style=${{ cursor: 'pointer', alignItems: 'flex-start', background: u.rol === k ? 'var(--sel)' : null }}>
+          <input type="radio" name="us-rol" value=${k} checked=${u.rol === k} onChange=${() => setU((x) => ({ ...x, rol: k }))} style=${{ marginTop: '3px', accentColor: 'var(--accent)' }} />
+          <div style=${{ minWidth: 0 }}><div className="strong">${r.label}</div><div className="small muted" style=${{ whiteSpace: 'normal' }}>${r.desc}</div></div></label>`)}
+      </div></div>
+  <//>`;
+}
+function PanelUsuarios({ s }) {
+  const [lista, setLista] = useState(null);
+  const [err, setErr] = useState('');
+  const [form, setForm] = useState(null);
+  const cargar = async () => { try { setLista(await usuarios.listar()); setErr(''); } catch (e) { setErr(e.message || 'No se pudo cargar'); setLista([]); } };
+  useEffect(() => { cargar(); }, []);
+  const yo = (s.usuario || '').toLowerCase();
+  const quitar = async (u) => {
+    const ok = await confirmar({ title: 'Quitar acceso a ' + (u.nombre || u.email), message: 'Ya no va a poder entrar al sistema. Su cuenta queda creada, así que podés volver a darle acceso cuando quieras.', okLabel: 'Quitar acceso', danger: true });
+    if (!ok) return;
+    try { await usuarios.quitar(u.email); toast('Acceso quitado'); cargar(); }
+    catch (e) { toast(/administrador/i.test(e.message || '') ? 'Tiene que quedar al menos un administrador.' : 'No se pudo quitar: ' + e.message, { tone: 'bad' }); }
+  };
+  return html`<${Panel} title="Usuarios y roles" count=${lista ? lista.length : null} flush actions=${html`<button className="btn sm primary" onClick=${() => setForm({})}><${Icon} n="plus" s=${14} />Agregar</button>`}>
+    ${!s.rolesActivos && html`<div className="banner warn" style=${{ margin: '0 14px 10px' }}><${Icon} n="alert" s=${16} /><span className="grow">Para usar roles falta actualizar la base de datos: corré el script nuevo (supabase/esquema.sql) en el SQL Editor de Supabase.</span></div>`}
+    ${err && s.rolesActivos && html`<div className="li muted-row bad-t" style=${{ padding: '4px 14px' }}>${err}</div>`}
+    ${lista === null ? html`<div className="li muted-row" style=${{ padding: '4px 14px' }}>Cargando usuarios…</div>`
+    : html`<div className="list">${lista.map((u) => html`<div key=${u.email} className="li plain" style=${{ flexWrap: 'wrap' }}>
+        <${Ico} tone=${colorFor(u.email)} text=${initials(u.nombre || u.email)} />
+        <div className="li-main" style=${{ flex: '1 1 180px' }}><span className="li-t">${u.nombre || u.email}${u.email === yo ? ' (vos)' : ''}</span><span className="li-s">${u.nombre ? u.email : ''}</span></div>
+        <${Pill} tone=${u.rol === 'admin' ? 't-violet' : u.rol === 'vendedor' ? 't-carbon' : u.rol === 'deposito' ? 't-kraft' : 't-ok'}>${(ROLES[u.rol] || {}).label || u.rol}<//>
+        ${u.email !== yo && html`<button className="btn sm ghost" onClick=${() => setForm(u)}>Cambiar</button><button className="iconbtn" aria-label=${'Quitar acceso a ' + u.email} onClick=${() => quitar(u)}><${Icon} n="trash" s=${15} /></button>`}
+      </div>`)}</div>`}
+    <p className="small muted" style=${{ padding: '8px 14px 6px' }}>Para sumar a alguien: agregalo acá con su email y rol, y pasale el link. La primera vez toca <b>Crear cuenta</b> con ese mismo email.</p>
+    ${form && html`<${UsuarioForm} init=${form.email ? form : null} onClose=${() => setForm(null)} onSaved=${() => { setForm(null); cargar(); }} />`}
+  <//>`;
 }
 
 function Ajustes({ s, go }) {
@@ -85,7 +137,7 @@ function Ajustes({ s, go }) {
     const r = new FileReader();
     r.onload = async () => {
       let j; try { j = JSON.parse(String(r.result)); } catch (err) { toast('El archivo no es un respaldo válido.', { tone: 'bad' }); return; }
-      if (!j || !Array.isArray(j.productos)) { toast('El archivo no es un respaldo de JF Gestión.', { tone: 'bad' }); return; }
+      if (!j || !Array.isArray(j.productos)) { toast('El archivo no es un respaldo de JG Gestión.', { tone: 'bad' }); return; }
       const n = COLS.reduce((a, c) => a + ((j[c] || []).length), 0);
       const ok = await confirmar({ title: 'Restaurar respaldo', message: `Se cargan ${n} registros del ${j.exportado ? fmtCorta(j.exportado.slice(0, 10)) : 'respaldo'}. Los que tengan el mismo identificador se reemplazan; el resto de tus datos no se toca.`, okLabel: 'Restaurar' });
       if (!ok) return;
@@ -97,9 +149,9 @@ function Ajustes({ s, go }) {
     };
     r.readAsText(f);
   };
-  const csvPedidos = () => guardarArchivo(`pedidos-jf-${todayISO()}.csv`, toCSV([['Número', 'Fecha', 'Entrega', 'Cliente', 'Zona', 'Estado', 'Productos', 'Unidades', 'Subtotal', 'Descuento', 'Envío', 'Total', 'Costo', 'Ganancia', 'Pagado', 'Saldo', 'Notas'],
+  const csvPedidos = () => guardarArchivo(`pedidos-jg-${todayISO()}.csv`, toCSV([['Número', 'Fecha', 'Entrega', 'Cliente', 'Zona', 'Estado', 'Productos', 'Unidades', 'Subtotal', 'Descuento', 'Envío', 'Total', 'Costo', 'Ganancia', 'Pagado', 'Saldo', 'Notas'],
     ...s.pedidos.map((p) => { const c = s.calc.get(p.id); const sn = p.clienteSnap || {}; return [numCorto(p), fmtCorta(p.fecha), p.entrega ? fmtCorta(p.entrega) : '', sn.nombre, sn.zona || sn.localidad, ESTADOS[p.estado].label, c.lineas, csvNum(c.unidades), csvNum(c.subtotal), csvNum(c.descMonto), csvNum(c.envio), csvNum(c.total), csvNum(c.costo), csvNum(c.ganancia), csvNum(c.pagado), csvNum(c.saldo), p.notas]; })]));
-  const csvDetalle = () => guardarArchivo(`ventas-detalle-jf-${todayISO()}.csv`, toCSV([['Número', 'Fecha', 'Cliente', 'Estado', 'Código', 'Producto', 'Cantidad', 'Precio', 'Dto %', 'Importe', 'Costo unitario'],
+  const csvDetalle = () => guardarArchivo(`ventas-detalle-jg-${todayISO()}.csv`, toCSV([['Número', 'Fecha', 'Cliente', 'Estado', 'Código', 'Producto', 'Cantidad', 'Precio', 'Dto %', 'Importe', 'Costo unitario'],
     ...s.pedidos.flatMap((p) => (p.items || []).map((it) => [numCorto(p), fmtCorta(p.fecha), (p.clienteSnap || {}).nombre, ESTADOS[p.estado].label, it.codigo, it.nombre, csvNum(it.cant), csvNum(it.precio), csvNum(it.desc || 0), csvNum(lineaSub(it)), csvNum(it.costo)]))]));
   const borrarTodo = async () => {
     const ok = await confirmar({ title: 'Borrar todos los datos', message: 'Se eliminan productos, clientes, pedidos y visitas para siempre. Descargá un respaldo antes.', okLabel: 'Borrar todo', danger: true, typeToConfirm: 'BORRAR' });
@@ -110,17 +162,32 @@ function Ajustes({ s, go }) {
     setBusy(''); toast(errs.length ? `Quedaron ${errs.length} registros sin borrar` : 'Datos borrados');
   };
   const total = s.productos.length + s.clientes.length + s.pedidos.length + s.visitas.length;
-  useCtx('Ajustes', [
+  const cerrarSesion = async () => { const ok = await confirmar({ title: 'Cerrar sesión', message: 'Para volver a entrar vas a necesitar tu email y contraseña.', okLabel: 'Cerrar sesión' }); if (ok) supaLogout(); };
+  const esAdmin = s.rol === 'admin';
+  useCtx('Ajustes', !esAdmin ? [{ id: 'out', title: 'Cerrar sesión', icon: 'x', run: cerrarSesion }] : [
     { id: 'gu', title: 'Guardar cambios', icon: 'check', tone: 'c-green', key: 'mod+s', primary: true, disabled: !dirty, run: guardar },
     total ? { id: 'bk', title: 'Descargar respaldo', icon: 'download', run: respaldo } : null,
     s.pedidos.length ? { id: 'cp', title: 'Exportar pedidos a CSV', icon: 'file', run: csvPedidos } : null,
     s.pedidos.length ? { id: 'cd', title: 'Exportar ventas por producto a CSV', icon: 'file', run: csvDetalle } : null,
   ]);
+  if (!esAdmin) {
+    return html`<${Fragment}>
+      <${PageHead} title="Ajustes" sub="Tu cuenta" />
+      <${Panel} title="Tu cuenta">
+        <div className="stack">
+          <dl className="dl"><dt>Email</dt><dd>${s.usuario}</dd>${s.nombreUsuario && html`<dt>Nombre</dt><dd>${s.nombreUsuario}</dd>`}<dt>Rol</dt><dd><b>${ROLES[s.rol].label}</b></dd></dl>
+          <p className="small muted">${ROLES[s.rol].desc}</p>
+          <div className="row-flex wrap"><button className="btn" onClick=${cerrarSesion}><${Icon} n="x" s=${15} />Cerrar sesión</button><button className="btn ghost" onClick=${() => openGlobal('atajos')}><${Icon} n="keyboard" s=${15} />Atajos de teclado</button></div>
+        </div>
+      <//>
+    <//>`;
+  }
   return html`<${Fragment}>
     <${PageHead} title="Ajustes" sub="Datos del negocio, depósito, documentos y respaldo"
       actions=${html`<${KBtn} cls="primary" k="mod+s" disabled=${!dirty || busy === 'cfg'} onClick=${guardar}>${busy === 'cfg' ? 'Guardando…' : 'Guardar cambios'}<//>`} />
     ${s.mode === 'local' && html`<div className="banner warn"><${Icon} n="alert" s=${16} /><span className="grow">Los datos se están guardando solo en este navegador. ${EN_CLAUDE ? 'Abrí el sistema desde su enlace en Claude, con tu cuenta, para guardarlos en la nube.' : 'Falta configurar la base de datos: completá config.js con la URL y la clave de Supabase.'}</span></div>`}
-    ${s.mode === 'supa' && html`<div className="banner info"><${Icon} n="user" s=${16} /><span className="grow">Entraste como <b>${s.usuario}</b>.</span><button className="btn sm" onClick=${async () => { const ok = await confirmar({ title: 'Cerrar sesión', message: 'Para volver a entrar vas a necesitar tu email y contraseña.', okLabel: 'Cerrar sesión' }); if (ok) supaLogout(); }}>Cerrar sesión</button></div>`}
+    ${s.mode === 'supa' && html`<div className="banner info"><${Icon} n="user" s=${16} /><span className="grow">Entraste como <b>${s.usuario}</b> · ${ROLES[s.rol].label}.</span><button className="btn sm" onClick=${cerrarSesion}>Cerrar sesión</button></div>`}
+    ${s.mode === 'supa' && html`<${PanelUsuarios} s=${s} />`}
     ${s.readOnly && html`<div className="banner warn"><${Icon} n="eye" s=${16} /><span className="grow">Estás viendo en modo lectura. Para cargar y modificar datos, el dueño tiene que compartirte el sistema como editor.</span></div>`}
     <div className="cols c-1-1">
       <${Panel} title="Tu negocio">

@@ -7,9 +7,9 @@ mkdir -p dist
 OUT=dist/artefacto.html
 {
   cat <<'HEAD'
-<title>JF Gestión</title>
+<title>JG Gestión</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Sistema de gestión de JF Distribuidora: productos, clientes, pedidos, agenda de visitas y estadísticas.">
+<meta name="description" content="Sistema de gestión de JG Distribuidora: productos, clientes, pedidos, agenda de visitas y estadísticas.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400..700&family=JetBrains+Mono:wght@400;500&display=swap">
@@ -18,7 +18,7 @@ HEAD
   cat src/style.css
   cat <<'MID'
 </style>
-<div id="root"><div class="loading"><div class="spinner"></div><span>Abriendo JF Gestión…</span></div></div>
+<div id="root"><div class="loading"><div class="spinner"></div><span>Abriendo JG Gestión…</span></div></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>

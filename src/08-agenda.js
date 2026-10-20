@@ -93,20 +93,20 @@ function Agenda({ s, go }) {
   const irHoy = () => { const d = new Date(); setMes(new Date(d.getFullYear(), d.getMonth(), 1)); setSel(hoy); };
   const moverDia = (n) => { const f = addISO(sel, n); setSel(f); const d = parseISO(f); if (d.getMonth() !== mes.getMonth() || d.getFullYear() !== mes.getFullYear()) setMes(new Date(d.getFullYear(), d.getMonth(), 1)); };
   useCtx('Agenda', [
-    { id: 'nv', title: 'Nueva visita', icon: 'calendar', tone: 'c-purple', key: 'v', primary: true, run: () => setForm({ fecha: sel }) },
-    { id: 'ru', title: 'Cargar ruta de la semana', icon: 'route', tone: 'c-purple', key: 'r', run: () => cargarRutaSemana(s, selD) },
+    puede('visita.editar') && { id: 'nv', title: 'Nueva visita', icon: 'calendar', tone: 'c-purple', key: 'v', primary: true, run: () => setForm({ fecha: sel }) },
+    puede('visita.editar') && { id: 'ru', title: 'Cargar ruta de la semana', icon: 'route', tone: 'c-purple', key: 'r', run: () => cargarRutaSemana(s, selD) },
     { id: 'ho', title: 'Ir a hoy', icon: 'clock', key: 't', run: irHoy },
     { id: 'da', title: 'Día anterior', icon: 'left', key: 'left', run: () => moverDia(-1) },
     { id: 'ds', title: 'Día siguiente', icon: 'right', key: 'right', run: () => moverDia(1) },
     { id: 'ma', title: 'Mes anterior', icon: 'left', run: () => cambiarMes(-1) },
     { id: 'ms', title: 'Mes siguiente', icon: 'right', run: () => cambiarMes(1) },
-    deRuta.length ? { id: 'ag', title: `Agendar los ${deRuta.length} clientes de ruta de este día`, icon: 'plus', tone: 'c-purple', run: () => agendar(deRuta, sel) } : null,
+    deRuta.length && puede('visita.editar') ? { id: 'ag', title: `Agendar los ${deRuta.length} clientes de ruta de este día`, icon: 'plus', tone: 'c-purple', run: () => agendar(deRuta, sel) } : null,
   ]);
   const tituloDia = cap(relDia(sel) === fmtDia(sel) ? fmtLarga(sel) : relDia(sel) + ', ' + fmtLarga(sel).split(' ').slice(1).join(' '));
 
   return html`<${Fragment}>
     <${PageHead} title="Agenda" sub=${`Esta semana: ${semana.tot} visitas · ${semana.hechas} hechas · ${semana.ped} con pedido`}
-      actions=${html`<${KBtn} icon="route" k="r" disabled=${busy} onClick=${() => cargarRutaSemana(s, selD)}>Cargar ruta<//><${KBtn} cls="primary" icon="plus" k="v" onClick=${() => setForm({ fecha: sel })}>Visita<//>`} />
+      actions=${puede('visita.editar') ? html`<${KBtn} icon="route" k="r" disabled=${busy} onClick=${() => cargarRutaSemana(s, selD)}>Cargar ruta<//><${KBtn} cls="primary" icon="plus" k="v" onClick=${() => setForm({ fecha: sel })}>Visita<//>` : null} />
     <div className="cols c-2-1">
       <section className="panel"><div className="panel-b stack-sm" style=${{ paddingTop: '10px' }}>
         <div className="row-flex">
@@ -132,11 +132,11 @@ function Agenda({ s, go }) {
         </div>
       </div></section>
       <div className="stack">
-        <${Panel} title=${tituloDia} count=${delDia.v.length || null} flush actions=${html`<${KBtn} cls="sm ghost" k="v" onClick=${() => setForm({ fecha: sel })}>Agendar<//>`}>
+        <${Panel} title=${tituloDia} count=${delDia.v.length || null} flush actions=${puede('visita.editar') ? html`<${KBtn} cls="sm ghost" k="v" onClick=${() => setForm({ fecha: sel })}>Agendar<//>` : null}>
           ${delDia.v.length ? html`<div className="list">${delDia.v.map((v) => html`<${VisitaRow} key=${v.id} v=${v} s=${s} go=${go} onEdit=${() => setForm(v)} />`)}</div>`
           : html`<div className="li muted-row" style=${{ padding: '2px 14px' }}>Sin visitas este día.</div>`}
         <//>
-        ${deRuta.length > 0 && html`<${Panel} title=${`De la ruta de los ${DIAS[selD.getDay()].toLowerCase()}`} count=${deRuta.length} flush actions=${html`<button className="btn sm primary" disabled=${busy} onClick=${() => agendar(deRuta, sel)}>Agendar todos</button>`}>
+        ${deRuta.length > 0 && puede('visita.editar') && html`<${Panel} title=${`De la ruta de los ${DIAS[selD.getDay()].toLowerCase()}`} count=${deRuta.length} flush actions=${html`<button className="btn sm primary" disabled=${busy} onClick=${() => agendar(deRuta, sel)}>Agendar todos</button>`}>
           <div className="list">${deRuta.map((c) => html`<div key=${c.id} className="li plain"><${Ico} tone=${colorFor(c.nombre)} text=${initials(c.nombre)} />
             <div className="li-main"><span className="li-t">${c.nombre}</span><span className="li-s">${c.zona || c.localidad || 'Sin zona'}</span></div>
             <button className="btn sm" disabled=${busy} onClick=${() => agendar([c], sel)}><${Icon} n="plus" s=${13} />Agendar</button></div>`)}</div>

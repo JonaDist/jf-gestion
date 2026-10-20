@@ -16,7 +16,7 @@ const SIG_ESTADO = { confirmado: 'Confirmar pedido', preparando: 'Pasar a armado
 /* ---------- listado ---------- */
 function Pedidos({ s, go, params }) {
   const [q, setQ] = useState('');
-  const [f, setF] = useState(params.estado || 'todos');
+  const [f, setF] = useState(params.estado || (s.rol === 'deposito' ? 'activos' : s.rol === 'repartidor' ? 'listo' : 'todos'));
   const [per, setPer] = useState('todo');
   const [limit, setLimit] = useState(100);
   const hoy = todayISO();
@@ -34,21 +34,21 @@ function Pedidos({ s, go, params }) {
   const grupos = [];
   for (const p of lista.slice(0, limit)) { const g = grupos[grupos.length - 1]; if (g && g.fecha === p.fecha) g.items.push(p); else grupos.push({ fecha: p.fecha, items: [p] }); }
   useCtx('Pedidos', [
-    { id: 'np', title: 'Nuevo pedido', icon: 'receipt', tone: 'c-red', key: 'n', primary: true, run: () => go('armador', {}) },
+    puede('pedido.crear') && { id: 'np', title: 'Nuevo pedido', icon: 'receipt', tone: 'c-red', key: 'n', primary: true, run: () => go('armador', {}) },
     { id: 'fa', title: 'Ver pedidos para armar', icon: 'truck', tone: 'c-orange', run: () => setF('activos') },
     { id: 'fi', title: 'Ver pedidos impagos', icon: 'cash', tone: 'c-yellow', run: () => setF('impagos') },
     { id: 'ft', title: 'Ver todos los pedidos', icon: 'list', run: () => { setF('todos'); setPer('todo'); } },
   ]);
   return html`<${Fragment}>
     <${PageHead} title="Pedidos" sub=${`${lista.length} ${lista.length === 1 ? 'pedido' : 'pedidos'} · ${money(total)}`}
-      actions=${html`<${KBtn} cls="primary desk-only" icon="plus" k="n" onClick=${() => go('armador', {})}>Nuevo pedido<//>`} />
+      actions=${puede('pedido.crear') ? html`<${KBtn} cls="primary desk-only" icon="plus" k="n" onClick=${() => go('armador', {})}>Nuevo pedido<//>` : null} />
     <div className="row-flex wrap">
       <${Search} page value=${q} onChange=${setQ} placeholder="Buscar por cliente, número o producto" />
       <${Seg} value=${per} onChange=${setPer} options=${[{ v: 'hoy', l: 'Hoy' }, { v: 'semana', l: 'Semana' }, { v: 'mes', l: 'Mes' }, { v: 'todo', l: 'Todo' }]} />
     </div>
     <${Chips} value=${f} onChange=${setF} options=${opts} />
     ${lista.length === 0 ? html`<div className="panel"><${Empty} icon="receipt" title=${s.pedidos.length ? 'No hay pedidos con estos filtros' : 'Todavía no hay pedidos'} sub=${s.pedidos.length ? 'Probá con otro estado o período.' : 'Elegís cliente, sumás productos y lo mandás al depósito.'}>
-        ${!s.pedidos.length && html`<${KBtn} cls="primary" icon="plus" k="n" onClick=${() => go('armador', {})}>Armar pedido<//>`}<//></div>`
+        ${!s.pedidos.length && puede('pedido.crear') && html`<${KBtn} cls="primary" icon="plus" k="n" onClick=${() => go('armador', {})}>Armar pedido<//>`}<//></div>`
     : html`<div className="panel" style=${{ paddingBottom: '6px' }}>${grupos.map((g) => { const tot = g.items.reduce((a, p) => a + s.calc.get(p.id).total, 0); return html`<div key=${g.fecha}>
         <${SecH} count=${g.items.length + ' · ' + money(tot)}>${cap(relDia(g.fecha) !== fmtDia(g.fecha) ? relDia(g.fecha) + ' · ' + fmtDia(g.fecha) : fmtLarga(g.fecha))}<//>
         <div className="list">${g.items.map((p) => html`<${PedidoRow} key=${p.id} p=${p} c=${s.calc.get(p.id)} onClick=${() => go('pedido', { id: p.id })} />`)}</div>
@@ -71,6 +71,7 @@ function nuevoBorrador(s, params) {
 }
 function Armador({ s, go, back, params }) {
   const editing = params.id ? s.pedMap.get(params.id) : null;
+  const esAdmin = s.rol === 'admin';
   const wide = useWide();
   const [d, setD] = useState(() => editing ? clean({ ...editing }) : nuevoBorrador(s, params));
   const [borrador, setBorrador] = useState(() => (!editing && !params.dup && !params.clienteId) ? lsGet(BORRADOR_KEY, null) : null);
@@ -78,7 +79,8 @@ function Armador({ s, go, back, params }) {
   const [cat, setCat] = useState('');
   const [kb, setKb] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [verGan, setVerGan] = useState(() => lsGet('jf-ver-ganancia', false));
+  const [verGanLS, setVerGan] = useState(() => lsGet('jf-ver-ganancia', false));
+  const verGan = verGanLS && esAdmin;
   const [nuevoCli, setNuevoCli] = useState(false);
   const [nuevoProd, setNuevoProd] = useState(null);
   const dirty = useRef(false);
@@ -134,7 +136,7 @@ function Armador({ s, go, back, params }) {
     }
     const p = { ...d, items, clienteSnap: snapCli(cli) };
     delete p.guardado;
-    if (!editing) { p.id = uid(); p.numero = (s.maxNum || 0) + 1; p.historial = [{ ts: Date.now(), estado: p.estado }]; p.pagos = []; }
+    if (!editing) { p.id = uid(); p.numero = (s.maxNum || 0) + 1; p.historial = [{ ts: Date.now(), estado: p.estado }]; p.pagos = []; if (s.usuario) p.tomadoPor = { email: s.usuario, nombre: s.nombreUsuario || '' }; }
     else if (editing.estado !== p.estado) p.historial = [...(editing.historial || []), { ts: Date.now(), estado: p.estado }];
     setSaving(true);
     try {
@@ -161,14 +163,14 @@ function Armador({ s, go, back, params }) {
   useCtx(editing ? 'Editando ' + numCorto(editing) : 'Nuevo pedido', [
     { id: 'gu', title: editing ? 'Guardar cambios' : d.estado === 'presupuesto' ? 'Guardar presupuesto' : 'Guardar pedido', icon: 'check', tone: 'c-green', key: 'mod+enter', primary: true, run: guardar },
     { id: 'bu', title: 'Buscar producto', icon: 'search', key: '/', run: focusBuscar },
-    { id: 'nc', title: 'Nuevo cliente', icon: 'user', tone: 'c-blue', run: () => setNuevoCli(true) },
-    { id: 'npr', title: 'Nuevo producto', icon: 'box', tone: 'c-orange', run: () => setNuevoProd({}) },
+    puede('cliente.editar') && { id: 'nc', title: 'Nuevo cliente', icon: 'user', tone: 'c-blue', run: () => setNuevoCli(true) },
+    puede('producto.editar') && { id: 'npr', title: 'Nuevo producto', icon: 'box', tone: 'c-orange', run: () => setNuevoProd({}) },
     !editing && { id: 'tp', title: d.estado === 'presupuesto' ? 'Cambiar a pedido' : 'Cambiar a presupuesto', icon: 'file', run: () => upd({ estado: d.estado === 'presupuesto' ? 'confirmado' : 'presupuesto' }) },
-    { id: 'vg', title: verGan ? 'Ocultar ganancia' : 'Ver ganancia', icon: verGan ? 'eyeOff' : 'eye', run: toggleGan },
+    esAdmin && { id: 'vg', title: verGan ? 'Ocultar ganancia' : 'Ver ganancia', icon: verGan ? 'eyeOff' : 'eye', run: toggleGan },
     { id: 'de', title: editing ? 'Cancelar edición' : 'Descartar pedido', icon: 'x', tone: 'c-red', run: editing ? salir : descartar },
   ]);
 
-  const picker = html`<${Panel} title="Productos" flush actions=${html`<button className="btn sm ghost" onClick=${() => setNuevoProd({})}><${Icon} n="plus" s=${14} />Nuevo</button>`}>
+  const picker = html`<${Panel} title="Productos" flush actions=${puede('producto.editar') ? html`<button className="btn sm ghost" onClick=${() => setNuevoProd({})}><${Icon} n="plus" s=${14} />Nuevo</button>` : null}>
     <div className="stack-sm" style=${{ padding: '0 12px 8px' }}>
       <${Search} page inputRef=${searchRef} value=${q} onChange=${setQ} onKeyDown=${onSearchKey} placeholder="Buscar por nombre o código · ↵ agrega" />
       ${s.cats.length > 0 && html`<${Chips} value=${cat} onChange=${(v) => setCat(v === cat ? '' : v)} options=${[{ v: '', l: 'Todas' }, ...s.cats.map((x) => ({ v: x, l: x }))]} />`}
@@ -205,7 +207,7 @@ function Armador({ s, go, back, params }) {
             <button aria-label="Sumar" onClick=${() => setItem(i, { cant: round2((Number(it.cant) || 0) + 1) })}><${Icon} n="plus" s=${14} /></button>
           </div>
           ${pr && pr.porBulto > 1 && html`<button className="btn sm ghost" title="Sumar un bulto" onClick=${() => setItem(i, { cant: round2((Number(it.cant) || 0) + Number(pr.porBulto)) })}>+${pr.porBulto}</button>`}
-          <span className="mini-lbl">$</span><div style=${{ width: '90px' }}><${NumInput} mini value=${it.precio} onChange=${(v) => setItem(i, { precio: v })} /></div>
+          <span className="mini-lbl">$</span><div style=${{ width: '90px' }}>${esAdmin ? html`<${NumInput} mini value=${it.precio} onChange=${(v) => setItem(i, { precio: v })} />` : html`<input className="mini-input" value=${String(round2(it.precio)).replace('.', ',')} readOnly tabIndex="-1" title="Solo el administrador cambia precios" />`}</div>
           <span className="mini-lbl">Dto %</span><div style=${{ width: '54px' }}><${NumInput} mini value=${it.desc} placeholder="0" onChange=${(v) => setItem(i, { desc: Math.min(100, Math.max(0, v)) })} /></div>
           <span className="grow"></span>
           <button className="iconbtn" aria-label="Quitar producto" onClick=${() => delItem(i)}><${Icon} n="trash" s=${15} /></button>
@@ -215,14 +217,14 @@ function Armador({ s, go, back, params }) {
 
   const clienteBlock = html`<div className="panel-b stack-sm" style=${{ paddingTop: wide ? '2px' : '12px' }}>
       <span className="lbl">Cliente</span>
-      <${ClienteSelect} s=${s} value=${d.clienteId} onChange=${elegirCliente} onNuevo=${() => setNuevoCli(true)} />
+      <${ClienteSelect} s=${s} value=${d.clienteId} onChange=${elegirCliente} onNuevo=${puede('cliente.editar') ? () => setNuevoCli(true) : null} />
       ${cli && cli.notas && html`<div className="banner kraft small"><${Icon} n="alert" s=${15} /><span className="grow">${cli.notas}</span></div>`}
     </div>`;
 
   const ticket = html`<section className="panel ticket">
     <div className="panel-h"><h2>${editing ? 'Pedido ' + numCorto(editing) : 'Nuevo pedido'}</h2>
       ${!editing ? html`<${Seg} value=${d.estado === 'presupuesto' ? 'presupuesto' : 'confirmado'} onChange=${(v) => upd({ estado: v })} options=${[{ v: 'confirmado', l: 'Pedido' }, { v: 'presupuesto', l: 'Presupuesto' }]} />`
-      : html`<select className="select" style=${{ width: 'auto', height: '28px', fontSize: '12.5px' }} value=${d.estado} onChange=${(e) => upd({ estado: e.target.value })} aria-label="Estado">${Object.entries(ESTADOS).map(([k, v]) => html`<option key=${k} value=${k}>${v.label}</option>`)}</select>`}
+      : !esAdmin ? html`<${EstadoPill} estado=${d.estado} />` : html`<select className="select" style=${{ width: 'auto', height: '28px', fontSize: '12.5px' }} value=${d.estado} onChange=${(e) => upd({ estado: e.target.value })} aria-label="Estado">${Object.entries(ESTADOS).map(([k, v]) => html`<option key=${k} value=${k}>${v.label}</option>`)}</select>`}
     </div>
     ${wide && clienteBlock}
     <div style=${{ borderTop: '1px solid var(--line)' }}>
@@ -244,7 +246,7 @@ function Armador({ s, go, back, params }) {
       ${c.descMonto > 0 && html`<div className="tr"><span className="soft">Descuento ${nf1.format(d.descGeneral)}%</span><span>−${money(c.descMonto)}</span></div>`}
       ${c.envio > 0 && html`<div className="tr"><span className="soft">Envío</span><span>${money(c.envio)}</span></div>`}
       <div className="tr big"><span>Total</span><span>${money(c.total)}</span></div>
-      <div className="tr small"><button className="btn sm ghost" style=${{ padding: '0 4px', height: '24px' }} onClick=${toggleGan}><${Icon} n=${verGan ? 'eyeOff' : 'eye'} s=${14} />${verGan ? 'Ocultar ganancia' : 'Ver ganancia'}</button>
+      <div className="tr small" style=${esAdmin ? null : { display: 'none' }}><button className="btn sm ghost" style=${{ padding: '0 4px', height: '24px' }} onClick=${toggleGan}><${Icon} n=${verGan ? 'eyeOff' : 'eye'} s=${14} />${verGan ? 'Ocultar ganancia' : 'Ver ganancia'}</button>
         ${verGan && html`<span className=${c.ganancia >= 0 ? 'ok-t strong' : 'bad-t strong'}>${money(c.ganancia)} · ${pct(c.margen)}</span>`}</div>
       <div className="row-flex desk-only" style=${{ marginTop: '6px', display: wide ? 'flex' : 'none' }}>
         <button className="btn ghost" onClick=${editing ? salir : descartar}>${editing ? 'Cancelar' : 'Descartar'}</button>
@@ -253,6 +255,9 @@ function Armador({ s, go, back, params }) {
     </div>
   </section>`;
 
+  if (editing && !esAdmin && !(puede('pedido.editar') && (editing.estado === 'presupuesto' || editing.estado === 'confirmado'))) {
+    return html`<div className="panel"><${Empty} icon="ban" title="Este pedido ya no se puede editar" sub="Cuando un pedido pasa a armado, solo el administrador puede modificarlo."><button className="btn" onClick=${back}>Volver</button><//></div>`;
+  }
   return html`<div className="builder-page stack">
     <${PageHead} title=${editing ? 'Editar pedido ' + numCorto(editing) : 'Armar pedido'} sub=${cli ? cli.nombre : 'Elegí el cliente y sumá productos'} />
     ${borrador && borrador.items && borrador.items.length > 0 && html`<div className="banner info"><${Icon} n="clock" s=${16} />
@@ -387,8 +392,10 @@ function ActList({ acts }) {
 /* ---------- detalle ---------- */
 function PedidoDetalle({ s, go, back, params }) {
   const p = s.pedMap.get(params.id);
+  const esAdmin = s.rol === 'admin';
   const [modal, setModal] = useState(null);
-  const [verGan, setVerGan] = useState(() => lsGet('jf-ver-ganancia', false));
+  const [verGanLS, setVerGan] = useState(() => lsGet('jf-ver-ganancia', false));
+  const verGan = verGanLS && esAdmin;
   const [busy, setBusy] = useState(false);
   const cfg = s.config;
   let acts = [], docs = [], gestion = [], c = null, cli = null, tel = '', idx = -1, next = null, txtDep = '', txtCli = '';
@@ -413,15 +420,18 @@ function PedidoDetalle({ s, go, back, params }) {
       { id: 'bol', title: 'Boleta en PDF', icon: 'file', tone: 'c-blue', key: 'b', run: () => setModal('boleta') },
       { id: 'tdep', title: 'Copiar texto para el depósito', icon: 'copy', run: () => setModal('txtDep') },
       { id: 'tcli', title: 'Copiar texto para el cliente', icon: 'copy', run: () => setModal('txtCli') },
-    ];
+    ].filter((a) => s.rol !== 'deposito' || (a.id !== 'cli' && a.id !== 'tcli'));
+    const temprano = p.estado === 'presupuesto' || p.estado === 'confirmado';
     gestion = [
-      c.saldo > 0 ? { id: 'cob', title: 'Registrar cobro', icon: 'cash', tone: 'c-yellow', key: 'c', run: () => setModal('cobro') } : null,
-      { id: 'edi', title: 'Editar pedido', icon: 'edit', tone: 'c-blue', key: 'm', run: () => go('armador', { id: p.id }) },
-      { id: 'rep', title: 'Repetir pedido con precios de hoy', icon: 'dup', tone: 'c-purple', key: 'r', run: () => go('armador', { dup: p.id }) },
-      cli ? { id: 'fic', title: 'Ver ficha de ' + cli.nombre, icon: 'user', run: () => go('cliente', { id: cli.id }) } : null,
-      p.estado === 'cancelado' ? { id: 'rea', title: 'Reactivar como confirmado', icon: 'check', tone: 'c-green', run: () => avanzar('confirmado') } : { id: 'can', title: 'Cancelar pedido', icon: 'ban', tone: 'c-red', run: cancelar },
-      { id: 'del', title: 'Eliminar pedido', icon: 'trash', tone: 'c-red', key: 'mod+backspace', danger: true, run: eliminar },
+      c.saldo > 0 && puede('cobro.registrar') ? { id: 'cob', title: 'Registrar cobro', icon: 'cash', tone: 'c-yellow', key: 'c', run: () => setModal('cobro') } : null,
+      esAdmin || (puede('pedido.editar') && temprano) ? { id: 'edi', title: 'Editar pedido', icon: 'edit', tone: 'c-blue', key: 'm', run: () => go('armador', { id: p.id }) } : null,
+      puede('pedido.crear') ? { id: 'rep', title: 'Repetir pedido con precios de hoy', icon: 'dup', tone: 'c-purple', key: 'r', run: () => go('armador', { dup: p.id }) } : null,
+      cli && puede('ver.clientes') ? { id: 'fic', title: 'Ver ficha de ' + cli.nombre, icon: 'user', run: () => go('cliente', { id: cli.id }) } : null,
+      p.estado === 'cancelado' ? (esAdmin ? { id: 'rea', title: 'Reactivar como confirmado', icon: 'check', tone: 'c-green', run: () => avanzar('confirmado') } : null)
+        : (esAdmin || (puede('pedido.cancelar') && temprano)) ? { id: 'can', title: 'Cancelar pedido', icon: 'ban', tone: 'c-red', run: cancelar } : null,
+      esAdmin ? { id: 'del', title: 'Eliminar pedido', icon: 'trash', tone: 'c-red', key: 'mod+backspace', danger: true, run: eliminar } : null,
     ].filter(Boolean);
+    if (!puedeEstado(next)) next = null;
     acts = [next && p.estado !== 'cancelado' ? { id: 'av', title: SIG_ESTADO[next], icon: 'check', tone: 'c-green', key: 'a', primary: true, run: () => avanzar(next) } : null, ...docs, ...gestion].filter(Boolean);
   }
   useCtx(p ? 'Pedido ' + numCorto(p) : 'Pedido', acts);
@@ -432,12 +442,12 @@ function PedidoDetalle({ s, go, back, params }) {
 
   return html`<${Fragment}>
     <${PageHead} title=${sn.nombre || 'Sin cliente'}
-      sub=${html`<span className="mono">${numCorto(p)}</span> · ${fmtCorta(p.fecha)} · ${c.lineas} productos · <b className="num" style=${{ color: 'var(--ink)' }}>${money(c.total)}</b>`}
+      sub=${html`<span className="mono">${numCorto(p)}</span> · ${fmtCorta(p.fecha)} · ${c.lineas} productos · <b className="num" style=${{ color: 'var(--ink)' }}>${money(c.total)}</b>${p.tomadoPor ? ' · tomado por ' + (p.tomadoPor.nombre || p.tomadoPor.email) : ''}`}
       actions=${html`<${EstadoPill} estado=${p.estado} />${c.pago && html`<${PagoPill} pago=${c.pago} />`}`} />
 
     <section className="panel"><div className="panel-b row-flex wrap" style=${{ paddingTop: '12px', paddingBottom: '12px', gap: '10px 14px' }}>
       ${p.estado === 'cancelado' ? html`<span className="grow bad-t" style=${{ fontWeight: 500 }}>Pedido cancelado. No cuenta en ventas ni descuenta stock.</span>
-          <button className="btn" disabled=${busy} onClick=${() => avanzar('confirmado')}>Reactivar como confirmado</button>`
+          ${esAdmin && html`<button className="btn" disabled=${busy} onClick=${() => avanzar('confirmado')}>Reactivar como confirmado</button>`}`
       : html`<div className="flow grow">${FLUJO.map((e, i) => html`<${Fragment} key=${e}>${i > 0 && html`<span className=${'bar-l' + (i <= idx ? ' done' : '')}></span>`}
           <span className=${'st' + (i < idx ? ' done' : i === idx ? ' cur' : '')}><span className="n">${i < idx ? '✓' : i + 1}</span>${ESTADOS[e].corto}</span><//>`)}</div>
         ${p.entrega && html`<span className="small soft row-flex" style=${{ gap: '5px' }}><${Icon} n="truck" s=${14} />Entrega ${relDia(p.entrega).toLowerCase()}</span>`}
@@ -452,7 +462,7 @@ function PedidoDetalle({ s, go, back, params }) {
         <${BoletaPreview} p=${p} cfg=${cfg} />
       </div>
       <div className="stack">
-        <${Panel} title="Cuenta" actions=${html`<button className="btn sm ghost" onClick=${toggleGan}><${Icon} n=${verGan ? 'eyeOff' : 'eye'} s=${14} />${verGan ? 'Ocultar' : 'Costos'}</button>`}>
+        <${Panel} title="Cuenta" actions=${esAdmin ? html`<button className="btn sm ghost" onClick=${toggleGan}><${Icon} n=${verGan ? 'eyeOff' : 'eye'} s=${14} />${verGan ? 'Ocultar' : 'Costos'}</button>` : null}>
           <dl className="dl">
             <dt>Total</dt><dd className="num strong">${money(c.total)}</dd>
             ${verGan && html`<dt>Costo</dt><dd className="num">${money(c.costo)}</dd><dt>Ganancia</dt><dd className=${'num strong ' + (c.ganancia >= 0 ? 'ok-t' : 'bad-t')}>${money(c.ganancia)} · ${pct(c.margen)}</dd>`}
@@ -461,7 +471,7 @@ function PedidoDetalle({ s, go, back, params }) {
           ${!c.cuenta && html`<p className="small muted" style=${{ marginTop: '10px' }}>${p.estado === 'presupuesto' ? 'Es un presupuesto: los cobros se registran cuando lo confirmás.' : 'Pedido cancelado.'}</p>`}
           ${c.cuenta && (p.pagos || []).length > 0 && html`<div style=${{ margin: '10px -8px 0' }}>${(p.pagos || []).map((pg) => html`<div key=${pg.id} className="li plain" style=${{ minHeight: '34px' }}>
             <${Ico} n="cash" tone="c-green" /><div className="li-main"><span className="li-t">${money(pg.monto)}</span><span className="li-s">${pg.medio} · ${fmtCorta(pg.fecha)}${pg.nota ? ' · ' + pg.nota : ''}</span></div>
-            <button className="iconbtn" aria-label="Quitar cobro" onClick=${() => quitarPago(pg)}><${Icon} n="x" s=${14} /></button></div>`)}</div>`}
+            ${esAdmin && html`<button className="iconbtn" aria-label="Quitar cobro" onClick=${() => quitarPago(pg)}><${Icon} n="x" s=${14} /></button>`}</div>`)}</div>`}
         <//>
         <${Panel} title="Acciones" flush><${ActList} acts=${gestion} /><//>
         <${Panel} title="Historial">

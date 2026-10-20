@@ -1,7 +1,7 @@
 {
-  "name": "JF Gestión",
-  "short_name": "JF Gestión",
-  "description": "Pedidos, clientes, productos, agenda y estadísticas de JF Distribuidora.",
+  "name": "JG Gestión",
+  "short_name": "JG Gestión",
+  "description": "Pedidos, clientes, productos, agenda y estadísticas de JG Distribuidora.",
   "lang": "es-AR",
   "start_url": "./",
   "scope": "./",

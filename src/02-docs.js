@@ -126,7 +126,7 @@ function dibujarBoleta(doc, p, cfg, opts, copia) {
   const M = 14, W = 210, R = W - M;
   doc.setTextColor(20, 23, 30); doc.setDrawColor(20, 23, 30);
   // Emisor
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(cfg.nombre || 'JF', M, 20);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.text(cfg.nombre || 'JG', M, 20);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
   const emi = [cfg.razonSocial, [cfg.direccion, cfg.localidad].filter(Boolean).join(' · '), cfg.telefono && 'Tel: ' + cfg.telefono, cfg.email, cfg.cuit && 'CUIT: ' + cfg.cuit, cfg.condIva && 'IVA: ' + cfg.condIva].filter(Boolean);
   emi.forEach((t, i) => doc.text(String(t), M, 25.5 + i * 4));
@@ -224,7 +224,7 @@ async function pdfEtiqueta(p, cfg) {
   const s = p.clienteSnap || {}; const c = calcPedido(p);
   const head = () => {
     doc.setFillColor(20, 23, 30); doc.rect(0, 0, 100, 13, 'F');
-    doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text((cfg.nombre || 'JF').toUpperCase(), 5, 8.6);
+    doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.text((cfg.nombre || 'JG').toUpperCase(), 5, 8.6);
     doc.setFontSize(8); doc.text('ORDEN DE ARMADO', 95, 8.4, { align: 'right' });
   };
   head();
@@ -264,7 +264,8 @@ async function pngEtiqueta(p, cfg) {
   const D = '"Inter", Arial, sans-serif', B = '"Inter", Arial, sans-serif';
   g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, W, H);
   g.fillStyle = '#161A21'; g.fillRect(0, 0, W, 130);
-  g.fillStyle = '#FFFFFF'; g.font = `700 64px ${D}`; g.textBaseline = 'middle'; g.fillText((cfg.nombre || 'JF').toUpperCase(), 50, 68);
+  g.fillStyle = '#FFFFFF'; g.font = `700 52px ${D}`; g.textBaseline = 'middle';
+  { let t = (cfg.nombre || 'JG').toUpperCase(); while (t.length > 2 && g.measureText(t).width > 560) t = t.slice(0, -1); g.fillText(t, 50, 68); }
   g.font = `600 28px ${D}`; g.textAlign = 'right'; g.fillText('ORDEN DE ARMADO', W - 50, 68); g.textAlign = 'left';
   g.fillStyle = '#161A21'; g.textBaseline = 'alphabetic';
   g.font = `700 132px ${D}`; g.fillText(numCorto(p), 44, 292);

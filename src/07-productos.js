@@ -175,26 +175,28 @@ function Productos({ s, go, params }) {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('');
   const [f, setF] = useState(params.filtro || 'todos');
-  const [modal, setModal] = useState(() => { const pr = params.open ? s.prodMap.get(params.open) : null; return pr ? { t: 'form', p: pr } : null; });
+  const esAdmin = s.rol === 'admin';
+  const abrir = (p) => { if (esAdmin) setModal({ t: 'form', p }); else if (puede('producto.stock')) setModal({ t: 'stock', p }); };
+  const [modal, setModal] = useState(() => { const pr = params.open ? s.prodMap.get(params.open) : null; return pr ? (esAdmin ? { t: 'form', p: pr } : puede('producto.stock') ? { t: 'stock', p: pr } : null) : null; });
   const [limit, setLimit] = useState(150);
   const test = { todos: (p) => p.activo !== false, bajo: stockBajo, sin: (p) => p.activo !== false && (Number(p.stock) || 0) <= 0, margen: (p) => p.activo !== false && margenDe(Number(p.costo) || 0, Number(p.precio) || 0) < 10, inactivos: (p) => p.activo === false };
   const base = s.productos.filter((p) => (!cat || p.categoria === cat) && matches(q, p.nombre, p.codigo, p.marca, p.categoria));
   const lista = base.filter(test[f] || test.todos);
   const inv = useMemo(() => { let c = 0, v = 0; for (const p of s.productos) { if (p.activo === false) continue; const st = Math.max(0, Number(p.stock) || 0); c += st * (Number(p.costo) || 0); v += st * (Number(p.precio) || 0); } return { c, v }; }, [s.version]);
-  const exportar = () => guardarArchivo('productos-jf.csv', toCSV([['Código', 'Nombre', 'Categoría', 'Marca', 'Unidad', 'Por bulto', 'Costo', 'Precio', 'PVP', 'Margen %', 'Stock', 'Stock mínimo', 'Activo'],
+  const exportar = () => guardarArchivo('productos-jg.csv', toCSV([['Código', 'Nombre', 'Categoría', 'Marca', 'Unidad', 'Por bulto', 'Costo', 'Precio', 'PVP', 'Margen %', 'Stock', 'Stock mínimo', 'Activo'],
     ...lista.map((p) => [p.codigo, p.nombre, p.categoria, p.marca, p.unidad, p.porBulto || 1, csvNum(p.costo), csvNum(p.precio), csvNum(p.pvp || 0), csvNum(margenDe(Number(p.costo) || 0, Number(p.precio) || 0)), csvNum(p.stock || 0), csvNum(p.stockMin || 0), p.activo === false ? 'No' : 'Sí'])]));
   const stockCls = (p) => { const st = Number(p.stock) || 0; return st <= 0 ? 't-bad' : stockBajo(p) ? 't-warn' : ''; };
   useCtx('Productos', [
-    { id: 'ad', title: 'Agregar producto', icon: 'box', tone: 'c-orange', key: 'a', primary: true, run: () => setModal({ t: 'form', p: {} }) },
-    { id: 'im', title: 'Importar productos desde Excel', icon: 'upload', tone: 'c-orange', key: 'i', run: () => setModal({ t: 'importar' }) },
-    s.productos.length ? { id: 'pr', title: 'Actualizar precios por porcentaje', icon: 'percent', tone: 'c-orange', key: 'p', run: () => setModal({ t: 'precios' }) } : null,
+    esAdmin && { id: 'ad', title: 'Agregar producto', icon: 'box', tone: 'c-orange', key: 'a', primary: true, run: () => setModal({ t: 'form', p: {} }) },
+    esAdmin && { id: 'im', title: 'Importar productos desde Excel', icon: 'upload', tone: 'c-orange', key: 'i', run: () => setModal({ t: 'importar' }) },
+    s.productos.length && esAdmin ? { id: 'pr', title: 'Actualizar precios por porcentaje', icon: 'percent', tone: 'c-orange', key: 'p', run: () => setModal({ t: 'precios' }) } : null,
     { id: 'fb', title: 'Ver productos con stock bajo', icon: 'alert', tone: 'c-yellow', run: () => setF('bajo') },
-    lista.length ? { id: 'ex', title: 'Exportar catálogo a CSV', icon: 'download', run: exportar } : null,
+    lista.length && esAdmin ? { id: 'ex', title: 'Exportar catálogo a CSV', icon: 'download', run: exportar } : null,
   ]);
   const meta = (p) => [p.categoria, p.marca, p.unidad && p.unidad !== 'Unidad' ? p.unidad + (p.porBulto > 1 ? ' x' + p.porBulto : '') : (p.porBulto > 1 ? 'bulto x' + p.porBulto : '')].filter(Boolean).join(' · ');
   return html`<${Fragment}>
-    <${PageHead} title="Productos" sub=${`${s.productos.filter((p) => p.activo !== false).length} activos · inventario ${moneyK(inv.c)} al costo · ${moneyK(inv.v)} a precio de venta`}
-      actions=${html`<${KBtn} cls="desk-only" icon="upload" k="i" onClick=${() => setModal({ t: 'importar' })}>Importar<//>
+    <${PageHead} title="Productos" sub=${`${s.productos.filter((p) => p.activo !== false).length} activos` + (esAdmin ? ` · inventario ${moneyK(inv.c)} al costo · ${moneyK(inv.v)} a precio de venta` : '')}
+      actions=${!esAdmin ? null : html`<${KBtn} cls="desk-only" icon="upload" k="i" onClick=${() => setModal({ t: 'importar' })}>Importar<//>
         <${KBtn} cls="desk-only" icon="percent" k="p" onClick=${() => setModal({ t: 'precios' })} disabled=${!s.productos.length}>Precios<//>
         <button className="btn icon desk-only" title="Exportar a CSV" aria-label="Exportar a CSV" onClick=${exportar} disabled=${!lista.length}><${Icon} n="download" s=${15} /></button>
         <${KBtn} cls="primary" icon="plus" k="a" onClick=${() => setModal({ t: 'form', p: {} })}>Producto<//>`} />
@@ -202,25 +204,25 @@ function Productos({ s, go, params }) {
       <${Search} page value=${q} onChange=${setQ} placeholder="Buscar por nombre, código o marca" />
       ${s.cats.length > 0 && html`<select className="select" style=${{ width: 'auto', flex: '0 1 210px' }} value=${cat} onChange=${(e) => setCat(e.target.value)} aria-label="Filtrar por categoría"><option value="">Todas las categorías</option>${s.cats.map((c) => html`<option key=${c} value=${c}>${c}</option>`)}</select>`}
     </div>
-    <${Chips} value=${f} onChange=${setF} options=${[['todos', 'Activos'], ['bajo', 'Stock bajo'], ['sin', 'Sin stock'], ['margen', 'Margen menor a 10%'], ['inactivos', 'Inactivos']].map(([v, l]) => ({ v, l, ct: base.filter(test[v]).length }))} />
+    <${Chips} value=${f} onChange=${setF} options=${[['todos', 'Activos'], ['bajo', 'Stock bajo'], ['sin', 'Sin stock'], ['margen', 'Margen menor a 10%'], ['inactivos', 'Inactivos']].filter(([v]) => esAdmin || (v !== 'margen' && v !== 'inactivos')).map(([v, l]) => ({ v, l, ct: base.filter(test[v]).length }))} />
     ${lista.length === 0 ? html`<div className="panel"><${Empty} icon="box" title=${s.productos.length ? 'Ningún producto con estos filtros' : 'Tu catálogo está vacío'} sub=${s.productos.length ? 'Probá con otra búsqueda.' : 'Cargalos de a uno o pegá tu lista de precios desde Excel.'}>
-        ${!s.productos.length && html`<${KBtn} cls="primary" icon="plus" k="a" onClick=${() => setModal({ t: 'form', p: {} })}>Agregar producto<//><${KBtn} icon="upload" k="i" onClick=${() => setModal({ t: 'importar' })}>Importar desde Excel<//>`}<//></div>`
+        ${!s.productos.length && esAdmin && html`<${KBtn} cls="primary" icon="plus" k="a" onClick=${() => setModal({ t: 'form', p: {} })}>Agregar producto<//><${KBtn} icon="upload" k="i" onClick=${() => setModal({ t: 'importar' })}>Importar desde Excel<//>`}<//></div>`
     : html`
       <div className="panel tbl-desk"><div className="tbl-wrap"><table className="tbl">
-        <thead><tr><th>Producto</th><th>Código</th><th className="r">Costo</th><th className="r">Precio</th><th className="r">Margen</th><th className="r">PVP</th><th className="r">Stock</th><th></th></tr></thead>
-        <tbody>${lista.slice(0, limit).map((p) => { const m = margenDe(Number(p.costo) || 0, Number(p.precio) || 0); return html`<tr key=${p.id} data-row="" tabIndex="0" onClick=${() => setModal({ t: 'form', p })}>
+        <thead><tr><th>Producto</th><th>Código</th>${esAdmin && html`<th className="r">Costo</th>`}<th className="r">Precio</th>${esAdmin && html`<th className="r">Margen</th>`}<th className="r">PVP</th><th className="r">Stock</th><th></th></tr></thead>
+        <tbody>${lista.slice(0, limit).map((p) => { const m = margenDe(Number(p.costo) || 0, Number(p.precio) || 0); return html`<tr key=${p.id} data-row="" tabIndex="0" onClick=${() => abrir(p)}>
           <td><div className="row-flex"><${Ico} n="box" tone=${colorFor(p.categoria || 'x')} /><div style=${{ minWidth: 0 }}><div className="cell-t ellipsis">${p.nombre}</div><div className="tiny muted ellipsis">${meta(p) || '—'}</div></div></div></td>
           <td className="mono muted">${p.codigo || '—'}</td>
-          <td className="r soft">${money(p.costo)}</td><td className="r cell-t">${money(p.precio)}</td>
-          <td className=${'r ' + (m < 10 ? 'bad-t' : m < 20 ? 'warn-t' : 'ok-t')}>${pct(m)}</td>
+          ${esAdmin && html`<td className="r soft">${money(p.costo)}</td>`}<td className="r cell-t">${money(p.precio)}</td>
+          ${esAdmin && html`<td className=${'r ' + (m < 10 ? 'bad-t' : m < 20 ? 'warn-t' : 'ok-t')}>${pct(m)}</td>`}
           <td className="r soft">${Number(p.pvp) > 0 ? money(p.pvp) : '—'}</td>
           <td className="r"><${Pill} plain tone=${stockCls(p)}>${qty(p.stock)}<//></td>
-          <td className="r"><button className="btn sm ghost" onClick=${(e) => { e.stopPropagation(); setModal({ t: 'stock', p }); }}>Stock</button></td></tr>`; })}</tbody>
+          <td className="r">${puede('producto.stock') && html`<button className="btn sm ghost" onClick=${(e) => { e.stopPropagation(); setModal({ t: 'stock', p }); }}>Stock</button>`}</td></tr>`; })}</tbody>
       </table></div></div>
-      <div className="panel list-mob" style=${{ padding: '6px 0' }}><div className="list">${lista.slice(0, limit).map((p) => html`<button key=${p.id} className="li" data-row="" onClick=${() => setModal({ t: 'form', p })}>
+      <div className="panel list-mob" style=${{ padding: '6px 0' }}><div className="list">${lista.slice(0, limit).map((p) => html`<button key=${p.id} className="li" data-row="" onClick=${() => abrir(p)}>
         <${Ico} n="box" tone=${colorFor(p.categoria || 'x')} />
-        <div className="li-main"><span className="li-t">${p.nombre}</span><span className="li-s"><span className="mono">${p.codigo || 's/c'}</span> · costo ${money(p.costo)} · ${pct(margenDe(Number(p.costo) || 0, Number(p.precio) || 0))}</span></div>
-        <div className="li-r"><span className="amt">${money(p.precio)}</span><span className=${'pill plain ' + stockCls(p)} onClick=${(e) => { e.stopPropagation(); setModal({ t: 'stock', p }); }}>Stock ${qty(p.stock)}</span></div>
+        <div className="li-main"><span className="li-t">${p.nombre}</span><span className="li-s"><span className="mono">${p.codigo || 's/c'}</span>${esAdmin ? ` · costo ${money(p.costo)} · ${pct(margenDe(Number(p.costo) || 0, Number(p.precio) || 0))}` : ` · ${p.unidad || 'Unidad'}${p.categoria ? ' · ' + p.categoria : ''}`}</span></div>
+        <div className="li-r"><span className="amt">${money(p.precio)}</span><span className=${'pill plain ' + stockCls(p)} onClick=${(e) => { e.stopPropagation(); if (puede('producto.stock')) setModal({ t: 'stock', p }); }}>Stock ${qty(p.stock)}</span></div>
       </button>`)}</div></div>
       ${lista.length > limit && html`<button className="btn block" onClick=${() => setLimit(limit + 250)}>Mostrar más (${lista.length - limit} restantes)</button>`}`}
     ${modal && modal.t === 'form' && html`<${ProductoForm} s=${s} init=${modal.p} onClose=${() => setModal(null)} />`}

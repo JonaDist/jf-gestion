@@ -76,6 +76,7 @@ function Estadisticas({ s, go }) {
     const buckets = new Map();
     for (let f = a; f <= b; f = addISO(f, 1)) { const k = keyOf(f); if (!buckets.has(k)) buckets.set(k, { key: k, value: 0, value2: 0, n: 0 }); }
     let ventas = 0, gan = 0, n = 0, uni = 0, pv = 0, pg = 0, pn = 0, cobrado = 0;
+    const vend = new Map();
     const clis = new Set(); const prods = new Map(); const clientes = new Map(); const cats = new Map(); const dow = Array.from({ length: 7 }, () => 0);
     for (const p of s.pedidos) {
       const c = s.calc.get(p.id);
@@ -86,6 +87,7 @@ function Estadisticas({ s, go }) {
       ventas += c.total; gan += c.ganancia; n++; uni += c.unidades; if (p.clienteId) clis.add(p.clienteId);
       const bk = buckets.get(keyOf(p.fecha)); if (bk) { bk.value += c.total; bk.value2 += c.ganancia; bk.n++; }
       dow[(parseISO(p.fecha).getDay() + 6) % 7] += c.total;
+      if (p.tomadoPor) { const vk = p.tomadoPor.email; const vx = vend.get(vk) || { label: p.tomadoPor.nombre || p.tomadoPor.email, value: 0, n: 0 }; vx.value += c.total; vx.n++; vend.set(vk, vx); }
       const ck = p.clienteId || '_cf'; const cx = clientes.get(ck) || { label: (p.clienteSnap || {}).nombre || 'Consumidor final', value: 0, n: 0, id: p.clienteId }; cx.value += c.total; cx.n++; clientes.set(ck, cx);
       const f = c.subtotal > 0 ? c.neto / c.subtotal : 1;
       for (const it of p.items || []) {
@@ -107,6 +109,7 @@ function Estadisticas({ s, go }) {
       trendV: pv > 0 ? (ventas - pv) / pv * 100 : null, trendG: pg > 0 ? (gan - pg) / pg * 100 : null, trendN: pn > 0 ? (n - pn) / pn * 100 : null,
       topP: [...prods.values()].sort((x, y) => (metric === 'cant' ? y.cant - x.cant : metric === 'gan' ? y.gan - x.gan : y.value - x.value)).slice(0, 10),
       topC: [...clientes.values()].sort((x, y) => y.value - x.value).slice(0, 10),
+      vendedores: [...vend.values()].sort((x, y) => y.value - x.value),
       cats: [...cats.entries()].map(([label, value]) => ({ label, value })).sort((x, y) => y.value - x.value),
       dow: dow.map((value, i) => ({ label: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][i], value })),
       vis: { tot: vis.length, hechas: vis.filter((v) => v.estado === 'visitado').length, ped: vis.filter((v) => v.pedidoId).length },
@@ -145,6 +148,9 @@ function Estadisticas({ s, go }) {
           <span className="hb-l">${c.label}</span><span className="hb-v"><span className="muted" style=${{ fontWeight: 500 }}>${c.n} ped. · </span>${moneyK(c.value)}</span>
           <div className="hb-track"><div className="hb-fill k" style=${{ width: Math.max(1, c.value / st.topC[0].value * 100) + '%' }}></div></div></button>`)}</div>` : html`<p className="muted small">Sin ventas en el período.</p>`}
       <//>
+      ${st.vendedores.length > 0 && html`<${Panel} title="Ventas por vendedor">
+        <${HBars} rows=${st.vendedores} fmt=${moneyK} sub=${(r) => r.n + ' ped.'} />
+      <//>`}
       <${Panel} title="Ventas por categoría">
         ${st.cats.length ? html`<${HBars} rows=${st.cats.slice(0, 10)} fmt=${moneyK} sub=${(r) => pct(r.value / totCat * 100)} />` : html`<p className="muted small">Sin datos.</p>`}
       <//>

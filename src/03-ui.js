@@ -261,6 +261,10 @@ function ClienteSelect({ s, value, onChange, onNuevo }) {
 
 /* ---------- paleta de comandos ---------- */
 function comandos(s, go) {
+  const PERM_CMD = { np: 'pedido.crear', nc: 'cliente.editar', npr: 'producto.editar', nv: 'visita.editar', ruta: 'visita.editar', imp: 'producto.editar', pre: 'producto.editar', arm: 'ver.pedidos', deu: 'ver.clientes', sb: 'ver.productos', bk: 'producto.editar' };
+  return comandosTodos(s, go).filter((c) => (PERM_CMD[c.id] ? puede(PERM_CMD[c.id]) : true) && (!c.id.startsWith('go-') || puedeVista(c.id.slice(3))));
+}
+function comandosTodos(s, go) {
   return [
     { id: 'np', title: 'Nuevo pedido', sub: 'Armar pedido o presupuesto', icon: 'receipt', tone: 'c-red', key: 'n', kw: 'armar venta presupuesto', run: () => go('armador', {}) },
     { id: 'nc', title: 'Nuevo cliente', sub: 'Agregar a la cartera', icon: 'user', tone: 'c-blue', kw: 'agregar comercio', run: () => openGlobal('cliente') },
@@ -272,7 +276,7 @@ function comandos(s, go) {
     { id: 'arm', title: 'Pedidos para armar', icon: 'truck', tone: 'c-yellow', kw: 'deposito pendientes', run: () => go('pedidos', { estado: 'activos' }) },
     { id: 'deu', title: 'Clientes con deuda', icon: 'cash', tone: 'c-yellow', kw: 'cobrar saldo cuenta corriente', run: () => go('clientes', { filtro: 'deuda' }) },
     { id: 'sb', title: 'Productos con stock bajo', icon: 'alert', tone: 'c-yellow', kw: 'reponer faltantes', run: () => go('productos', { filtro: 'bajo' }) },
-    ...NAV.map((n, i) => ({ id: 'go-' + n.v, title: n.l, sub: 'Ir a la sección', icon: n.i, key: 'alt+' + (i + 1), kw: 'ir abrir', run: () => go(n.v, {}) })),
+    ...navVisible().map((n, i) => ({ id: 'go-' + n.v, title: n.l, sub: 'Ir a la sección', icon: n.i, key: 'alt+' + (i + 1), kw: 'ir abrir', run: () => go(n.v, {}) })),
     { id: 'bk', title: 'Descargar respaldo', sub: 'Todo el sistema en un archivo', icon: 'download', kw: 'backup exportar', run: () => descargarRespaldo(storeSnapshot()) },
     { id: 'help', title: 'Atajos de teclado', icon: 'keyboard', key: '?', kw: 'ayuda teclas', run: () => openGlobal('atajos') },
   ];
@@ -287,16 +291,16 @@ function Palette({ s, go }) {
   const ca = ctx.actions.filter((a) => !a.disabled && matches(q, a.title, a.kw));
   if (ca.length) secs.push({ title: ctx.label || 'Acciones', items: ca.map((a) => ({ ...a, typ: 'Acción' })) });
   if (q.trim()) {
-    const cl = s.clientes.filter((c) => matches(q, c.nombre, c.contacto, c.zona, c.localidad, c.telefono, c.cuit)).slice(0, 5)
+    const cl = !puede('ver.clientes') ? [] : s.clientes.filter((c) => matches(q, c.nombre, c.contacto, c.zona, c.localidad, c.telefono, c.cuit)).slice(0, 5)
       .map((c) => ({ id: 'c-' + c.id, text: initials(c.nombre), tone: colorFor(c.nombre), title: c.nombre, sub: [c.zona || c.localidad, c.contacto].filter(Boolean).join(' · '), typ: 'Cliente', run: () => go('cliente', { id: c.id }) }));
-    const pr = s.productos.filter((p) => matches(q, p.nombre, p.codigo, p.marca, p.categoria)).slice(0, 5)
+    const pr = !puede('ver.productos') ? [] : s.productos.filter((p) => matches(q, p.nombre, p.codigo, p.marca, p.categoria)).slice(0, 5)
       .map((p) => ({ id: 'p-' + p.id, icon: 'box', tone: colorFor(p.categoria || 'x'), title: p.nombre, sub: `${p.codigo || 's/c'} · ${money(p.precio)} · stock ${qty(p.stock)}`, typ: 'Producto', run: () => go('productos', { open: p.id }) }));
-    const pe = s.pedidos.filter((p) => matches(q, numCorto(p), String(p.numero), p.clienteSnap && p.clienteSnap.nombre)).slice(0, 5)
+    const pe = !puede('ver.pedidos') ? [] : s.pedidos.filter((p) => matches(q, numCorto(p), String(p.numero), p.clienteSnap && p.clienteSnap.nombre)).slice(0, 5)
       .map((p) => ({ id: 'o-' + p.id, icon: 'receipt', tone: ESTADO_ICO[p.estado], title: `${numCorto(p)} · ${(p.clienteSnap || {}).nombre || 'Sin cliente'}`, sub: `${fmtDia(p.fecha)} · ${money(s.calc.get(p.id).total)} · ${ESTADOS[p.estado].label}`, typ: 'Pedido', run: () => go('pedido', { id: p.id }) }));
     if (pe.length) secs.push({ title: 'Pedidos', items: pe });
     if (cl.length) secs.push({ title: 'Clientes', items: cl });
     if (pr.length) secs.push({ title: 'Productos', items: pr });
-  } else if (s.pedidos.length) {
+  } else if (s.pedidos.length && puede('ver.pedidos')) {
     secs.push({ title: 'Pedidos recientes', items: s.pedidos.slice(0, 3).map((p) => ({ id: 'r-' + p.id, icon: 'receipt', tone: ESTADO_ICO[p.estado], title: `${numCorto(p)} · ${(p.clienteSnap || {}).nombre || 'Sin cliente'}`, sub: `${fmtDia(p.fecha)} · ${money(s.calc.get(p.id).total)}`, typ: ESTADOS[p.estado].label, run: () => go('pedido', { id: p.id }) })) });
   }
   const cmds = comandos(s, go).filter((c) => matches(q, c.title, c.sub, c.kw));
